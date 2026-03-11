@@ -9,9 +9,21 @@ const VideoSection = () => {
 
   return (
     <section className="section-dark border-t border-dark-border">
-      <div className="container mx-auto px-6 py-20 md:py-28">
+      <div className="container mx-auto px-6 py-16 md:py-24">
         <ScrollReveal>
-          <div className="relative rounded-3xl overflow-hidden aspect-video max-w-5xl mx-auto group cursor-pointer shadow-2xl"
+          <div className="text-center mb-10 md:mb-14">
+            <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">
+              See it in action
+            </span>
+            <h2 className="font-heading text-3xl md:text-4xl lg:text-5xl font-light text-dark-foreground mt-4">
+              Watch our instructors teach<span className="text-accent">.</span>
+            </h2>
+          </div>
+        </ScrollReveal>
+
+        <ScrollReveal>
+          <div
+            className="relative rounded-2xl sm:rounded-3xl overflow-hidden aspect-video max-w-5xl mx-auto group cursor-pointer shadow-2xl"
             onClick={() => setPlaying(!playing)}
           >
             <AnimatePresence mode="wait">
