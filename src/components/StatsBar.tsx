@@ -2,10 +2,10 @@ import { motion, useInView } from "framer-motion";
 import { useRef, useState, useEffect } from "react";
 
 const stats = [
-  { value: 500, suffix: "+", label: "Active Classes" },
-  { value: 120, suffix: "+", label: "Expert Instructors" },
-  { value: 15, suffix: "K+", label: "Happy Students" },
-  { value: 4.9, suffix: "", label: "Average Rating", isDecimal: true },
+  { value: 35, suffix: "+", label: "Cities Covered" },
+  { value: 450, suffix: "+", label: "Live Workshops" },
+  { value: 12, suffix: "K+", label: "Learners Exploring" },
+  { value: 4.8, suffix: "", label: "Average Rating", isDecimal: true },
 ];
 
 const AnimatedNumber = ({ value, suffix, isDecimal }: { value: number; suffix: string; isDecimal?: boolean }) => {

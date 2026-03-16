@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 
 const partners = [
-  "Skillshare", "MasterClass", "Udemy", "Coursera", "CreativeLive", "Domestika"
+  "Bengaluru Studios", "Mumbai Makers", "Delhi NCR Creators", "Chennai Arts", "Pune Workshops", "Hyderabad Collectives"
 ];
 
 const TrustedBySection = () => {
@@ -9,7 +9,7 @@ const TrustedBySection = () => {
     <section className="bg-background border-b border-border/30">
       <div className="container mx-auto px-6 py-10 md:py-14">
         <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center mb-8">
-          Trusted by leading platforms & instructors
+          Inspired by how local studios, creators, and workshop communities grow in India
         </p>
         <div className="overflow-hidden relative">
           <div className="absolute left-0 top-0 bottom-0 w-20 bg-gradient-to-r from-background to-transparent z-10" />
