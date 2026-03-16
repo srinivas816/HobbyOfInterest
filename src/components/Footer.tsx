@@ -11,22 +11,22 @@ const Footer = () => {
                 Hobby of Interest<span className="text-accent">.</span>
               </span>
               <p className="font-body text-xs sm:text-sm text-dark-muted mt-4 leading-relaxed max-w-xs">
-                A marketplace for people who want to learn with their hands. Discover, create, and grow.
+                A hobby marketplace shaped for Indian learners, local creators, and workshop-led communities.
               </p>
             </div>
 
             {[
               {
                 title: "Platform",
-                links: ["Browse Classes", "For Instructors", "Pricing", "How It Works", "FAQ"],
+                links: ["Browse by City", "Weekend Workshops", "Instructor Plans", "Planner", "FAQs"],
               },
               {
-                title: "Company",
-                links: ["About", "Blog", "Careers", "Press", "Contact"],
+                title: "Markets",
+                links: ["Bengaluru", "Mumbai", "Delhi NCR", "Chennai", "Hyderabad"],
               },
               {
-                title: "Legal",
-                links: ["Privacy", "Terms", "Cookie Policy", "Accessibility"],
+                title: "Creator Growth",
+                links: ["Lead Capture", "Waitlists", "Referrals", "Pricing Insights"],
               },
             ].map((col) => (
               <div key={col.title}>
@@ -49,10 +49,10 @@ const Footer = () => {
 
         <div className="border-t border-dark-border mt-10 md:mt-12 pt-6 md:pt-8 flex flex-col sm:flex-row justify-between items-center gap-4">
           <p className="font-body text-[10px] sm:text-xs text-dark-muted">
-            © 2026 Hobby of Interest. All rights reserved.
+            © 2026 Hobby of Interest. Built for India-first hobby discovery.
           </p>
           <div className="flex gap-5 sm:gap-6">
-            {["Twitter", "Instagram", "LinkedIn", "YouTube"].map((s) => (
+            {["Instagram", "YouTube", "LinkedIn", "WhatsApp"].map((s) => (
               <a key={s} href="#" className="font-body text-[10px] sm:text-xs text-dark-muted hover:text-accent transition-colors duration-300">
                 {s}
               </a>
