@@ -12,17 +12,17 @@ import heroPottery from "@/assets/hero-pottery.jpg";
 import heroPainting from "@/assets/hero-painting.jpg";
 import heroFloristry from "@/assets/hero-floristry.jpg";
 
-const categories = ["All categories", "Crafts", "Art", "Culinary", "Music", "Wellness"];
+const categories = ["All categories", "Traditional Arts", "Food", "Music", "DIY", "Wellness"];
 
 const classes = [
-  { title: "Wheel Thrown Pottery", image: heroPottery, duration: "6 weeks", category: "Crafts", instructor: "Maria Chen", price: "$89" },
-  { title: "Artisan Bread Baking", image: categoryBaking, duration: "4 weeks", category: "Culinary", instructor: "James Oliver", price: "$65" },
-  { title: "Woodworking Basics", image: categoryWoodworking, duration: "8 weeks", category: "Crafts", instructor: "Tom Birch", price: "$120" },
-  { title: "Watercolor Landscapes", image: categoryWatercolor, duration: "5 weeks", category: "Art", instructor: "Lena Park", price: "$75" },
-  { title: "Textile & Sewing", image: categorySewing, duration: "6 weeks", category: "Crafts", instructor: "Sarah Mills", price: "$95" },
-  { title: "Acoustic Guitar", image: categoryMusic, duration: "10 weeks", category: "Music", instructor: "David Reyes", price: "$110" },
-  { title: "Oil Painting Studio", image: heroPainting, duration: "8 weeks", category: "Art", instructor: "Claude Morel", price: "$99" },
-  { title: "Floral Arrangement", image: heroFloristry, duration: "3 weeks", category: "Wellness", instructor: "Ivy Greene", price: "$55" },
+  { title: "Weekend Pottery Wheel Basics", image: heroPottery, duration: "Sat–Sun", category: "DIY", instructor: "Ananya Rao", price: "₹2,499", city: "Bengaluru" },
+  { title: "Artisan Bread & Tea Cakes", image: categoryBaking, duration: "4 sessions", category: "Food", instructor: "Chef Rhea Mehta", price: "₹2,200", city: "Mumbai" },
+  { title: "Woodcraft for Home Decor", image: categoryWoodworking, duration: "6 sessions", category: "DIY", instructor: "Karthik Iyer", price: "₹3,100", city: "Pune" },
+  { title: "Madhubani & Watercolor Mix", image: categoryWatercolor, duration: "5 weeks", category: "Traditional Arts", instructor: "Neha Jha", price: "₹1,850", city: "Delhi NCR" },
+  { title: "Sewing for Small Labels", image: categorySewing, duration: "Weekend batch", category: "DIY", instructor: "Sana Mirza", price: "₹2,750", city: "Hyderabad" },
+  { title: "Bollywood & Acoustic Guitar", image: categoryMusic, duration: "8 weeks", category: "Music", instructor: "Arjun Dsouza", price: "₹1,499", city: "Online" },
+  { title: "Canvas Painting for Beginners", image: heroPainting, duration: "3 weekends", category: "Traditional Arts", instructor: "Devika Sen", price: "₹1,999", city: "Kolkata" },
+  { title: "Mindful Floral Styling", image: heroFloristry, duration: "2 workshops", category: "Wellness", instructor: "Ira Kapoor", price: "₹1,650", city: "Chennai" },
 ];
 
 const CategoriesSection = () => {
@@ -36,15 +36,14 @@ const CategoriesSection = () => {
         <ScrollReveal>
           <div className="text-center max-w-3xl mx-auto">
             <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">
-              Our Classes
+              Popular in Indian metros
             </span>
             <h2 className="font-heading text-4xl md:text-5xl lg:text-6xl font-light text-foreground mt-4">
-              Unlimited access to 100+ instructors<span className="text-accent">.</span>
+              Discover hobby formats people actually book after work and on weekends<span className="text-accent">.</span>
             </h2>
           </div>
         </ScrollReveal>
 
-        {/* Category filters */}
         <ScrollReveal delay={0.15}>
           <div className="flex flex-wrap justify-center gap-2 sm:gap-3 mt-10 md:mt-12">
             {categories.map((cat) => (
@@ -63,7 +62,6 @@ const CategoriesSection = () => {
           </div>
         </ScrollReveal>
 
-        {/* Class grid */}
         <StaggerChildren
           className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5 sm:gap-6 mt-12 md:mt-14"
           staggerDelay={0.08}
@@ -82,7 +80,11 @@ const CategoriesSection = () => {
                   <div className="absolute top-3 right-3 sm:top-4 sm:right-4 w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-background/90 backdrop-blur-sm flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all duration-300 group-hover:translate-x-0 translate-x-2">
                     <ArrowUpRight size={16} className="text-foreground" />
                   </div>
-                  {/* Price badge */}
+                  <div className="absolute top-3 left-3 sm:top-4 sm:left-4">
+                    <span className="bg-background/90 backdrop-blur-sm text-foreground font-body text-[11px] uppercase tracking-[0.18em] px-3 py-1.5 rounded-full">
+                      {cls.city}
+                    </span>
+                  </div>
                   <div className="absolute bottom-3 left-3 sm:bottom-4 sm:left-4">
                     <span className="bg-background/90 backdrop-blur-sm text-foreground font-heading text-sm font-semibold px-3 py-1.5 rounded-full">
                       {cls.price}
@@ -107,10 +109,10 @@ const CategoriesSection = () => {
         <ScrollReveal delay={0.2}>
           <div className="text-center mt-12">
             <a
-              href="#"
+              href="#planner"
               className="inline-flex items-center gap-2 font-body text-sm text-foreground border border-border px-8 py-3.5 rounded-full hover:border-foreground hover:bg-foreground hover:text-background transition-all duration-300"
             >
-              View All Classes <ArrowUpRight size={15} />
+              Plan My Hobby Path <ArrowUpRight size={15} />
             </a>
           </div>
         </ScrollReveal>
