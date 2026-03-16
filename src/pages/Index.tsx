@@ -11,6 +11,7 @@ import PricingSection from "@/components/PricingSection";
 import NewsletterSection from "@/components/NewsletterSection";
 import CTASection from "@/components/CTASection";
 import Footer from "@/components/Footer";
+import LearningPlannerSection from "@/components/LearningPlannerSection";
 
 const Index = () => {
   return (
@@ -21,6 +22,7 @@ const Index = () => {
       <StatsBar />
       <HowItWorksSection />
       <CategoriesSection />
+      <LearningPlannerSection />
       <SkillsSection />
       <VideoSection />
       <TestimonialsSection />

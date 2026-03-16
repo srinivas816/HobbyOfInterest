@@ -8,46 +8,46 @@ const plans = [
     name: "Explorer",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    description: "Start discovering hobbies for free",
+    description: "Start discovering hobbies across Indian cities for free",
     features: [
-      "Browse all classes",
-      "Save favorites",
-      "Community forums",
-      "1 free trial class per month",
+      "Browse city-based classes",
+      "Save workshops and instructors",
+      "Community recommendations",
+      "1 free trial event every month",
     ],
     cta: "Get Started Free",
     popular: false,
     style: "bg-card border-border/50",
   },
   {
-    name: "Creator",
-    monthlyPrice: 19,
-    yearlyPrice: 190,
-    description: "Unlimited learning for passionate hobbyists",
+    name: "Creator Plus",
+    monthlyPrice: 699,
+    yearlyPrice: 6990,
+    description: "For hobby learners who want regular classes and faster booking",
     features: [
-      "Unlimited class access",
-      "Offline downloads",
-      "Priority booking",
-      "Instructor Q&A",
-      "Progress tracking",
-      "Certificate of completion",
+      "Priority access to weekend batches",
+      "Unlimited live and recorded classes",
+      "WhatsApp reminders and updates",
+      "Multilingual instructor sessions",
+      "Learning streaks and progress tracking",
+      "Exclusive creator community events",
     ],
     cta: "Start 7-Day Trial",
     popular: true,
     style: "bg-dark text-dark-foreground border-dark-border",
   },
   {
-    name: "Instructor",
-    monthlyPrice: 39,
-    yearlyPrice: 390,
-    description: "List and monetize your classes",
+    name: "Instructor Pro",
+    monthlyPrice: 1499,
+    yearlyPrice: 14990,
+    description: "For studios and solo creators who want to teach and sell classes",
     features: [
       "Unlimited class listings",
-      "Student management",
-      "Payment processing",
-      "Analytics dashboard",
-      "Marketing tools",
-      "Priority support",
+      "Lead capture for workshops",
+      "Student waitlists by city",
+      "Pricing insights in INR",
+      "Creator profile and social proof",
+      "Priority onboarding support",
     ],
     cta: "Start Teaching",
     popular: false,
@@ -64,15 +64,14 @@ const PricingSection = () => {
         <ScrollReveal>
           <div className="text-center max-w-2xl mx-auto">
             <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">
-              Pricing
+              Pricing for India
             </span>
             <h2 className="font-heading text-4xl md:text-5xl lg:text-6xl font-light text-foreground mt-4">
-              Plans for every creative<span className="text-accent">.</span>
+              Simple INR plans for learners and instructors<span className="text-accent">.</span>
             </h2>
           </div>
         </ScrollReveal>
 
-        {/* Toggle */}
         <ScrollReveal delay={0.1}>
           <div className="flex items-center justify-center gap-4 mt-10">
             <span className={`font-body text-sm transition-colors ${!annual ? "text-foreground" : "text-muted-foreground"}`}>
@@ -85,14 +84,14 @@ const PricingSection = () => {
               }`}
             >
               <div
-                className={`absolute top-0.5 w-6 h-6 rounded-full bg-white shadow-md transition-transform duration-300 ${
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-background shadow-md transition-transform duration-300 ${
                   annual ? "translate-x-7" : "translate-x-0.5"
                 }`}
               />
             </button>
             <span className={`font-body text-sm transition-colors ${annual ? "text-foreground" : "text-muted-foreground"}`}>
               Annual
-              <span className="ml-1.5 text-xs text-accent font-medium">Save 20%</span>
+              <span className="ml-1.5 text-xs text-accent font-medium">Save 2 months</span>
             </span>
           </div>
         </ScrollReveal>
@@ -108,7 +107,7 @@ const PricingSection = () => {
               >
                 {plan.popular && (
                   <span className="absolute -top-3 left-8 bg-accent text-accent-foreground font-body text-xs font-medium px-4 py-1.5 rounded-full">
-                    Most Popular
+                    Best Value
                   </span>
                 )}
 
@@ -121,7 +120,7 @@ const PricingSection = () => {
 
                 <div className="mt-6 mb-6">
                   <span className={`font-heading text-5xl font-light ${plan.popular ? "text-dark-foreground" : "text-foreground"}`}>
-                    ${annual ? plan.yearlyPrice : plan.monthlyPrice}
+                    ₹{annual ? plan.yearlyPrice : plan.monthlyPrice}
                   </span>
                   <span className={`font-body text-sm ml-1 ${plan.popular ? "text-dark-muted" : "text-muted-foreground"}`}>
                     /{annual ? "year" : "month"}
@@ -131,7 +130,7 @@ const PricingSection = () => {
                 <ul className="space-y-3 mb-8 flex-1">
                   {plan.features.map((feature) => (
                     <li key={feature} className="flex items-start gap-3">
-                      <Check size={16} className={`mt-0.5 flex-shrink-0 ${plan.popular ? "text-accent" : "text-accent"}`} />
+                      <Check size={16} className="mt-0.5 flex-shrink-0 text-accent" />
                       <span className={`font-body text-sm ${plan.popular ? "text-dark-foreground/80" : "text-foreground/80"}`}>
                         {feature}
                       </span>
@@ -140,7 +139,7 @@ const PricingSection = () => {
                 </ul>
 
                 <a
-                  href="#"
+                  href="#cta"
                   className={`inline-flex items-center justify-center gap-2 font-body text-sm px-6 py-4 rounded-full transition-all duration-300 font-medium w-full ${
                     plan.popular
                       ? "bg-accent text-accent-foreground hover:brightness-110 shadow-lg shadow-accent/25"

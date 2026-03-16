@@ -14,7 +14,6 @@ const NewsletterSection = () => {
 
   return (
     <section className="bg-background relative overflow-hidden">
-      {/* Background decorative elements */}
       <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent/5 rounded-full blur-[120px]" />
       <div className="absolute bottom-0 right-1/4 w-80 h-80 bg-primary/5 rounded-full blur-[100px]" />
 
@@ -26,10 +25,10 @@ const NewsletterSection = () => {
             </div>
 
             <h2 className="font-heading text-3xl md:text-4xl lg:text-5xl font-light text-foreground">
-              Stay inspired<span className="text-accent">.</span>
+              Get local hobby drops<span className="text-accent">.</span>
             </h2>
-            <p className="font-body text-base text-muted-foreground mt-4 max-w-md mx-auto leading-relaxed">
-              Get weekly recommendations, new class alerts, and creative tips delivered to your inbox.
+            <p className="font-body text-base text-muted-foreground mt-4 max-w-xl mx-auto leading-relaxed">
+              Receive city-wise workshop picks, festive class roundups, creator stories, and practical hobby ideas curated for Indian learners.
             </p>
 
             {!submitted ? (
@@ -55,15 +54,15 @@ const NewsletterSection = () => {
                 animate={{ opacity: 1, y: 0 }}
                 className="mt-8 p-6 rounded-2xl bg-accent/10 border border-accent/20 max-w-md mx-auto"
               >
-                <p className="font-heading text-lg text-foreground">Welcome aboard! 🎨</p>
+                <p className="font-heading text-lg text-foreground">You’re in 🎉</p>
                 <p className="font-body text-sm text-muted-foreground mt-1">
-                  Check your inbox for a confirmation email.
+                  We’ll send you curated workshops and new city launches soon.
                 </p>
               </motion.div>
             )}
 
             <p className="font-body text-xs text-muted-foreground/60 mt-4">
-              No spam, ever. Unsubscribe anytime.
+              Useful updates only. Unsubscribe anytime.
             </p>
           </div>
         </ScrollReveal>
