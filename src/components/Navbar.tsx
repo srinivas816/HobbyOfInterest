@@ -5,9 +5,10 @@ import { motion, AnimatePresence } from "framer-motion";
 const navLinks = [
   { label: "How It Works", href: "#how-it-works" },
   { label: "Categories", href: "#categories" },
-  { label: "Planner", href: "#planner" },
+  { label: "Features", href: "#features" },
   { label: "Pricing", href: "#pricing" },
   { label: "Testimonials", href: "#testimonials" },
+  { label: "FAQ", href: "#faq" },
 ];
 
 const Navbar = () => {
@@ -18,7 +19,6 @@ const Navbar = () => {
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
-
       const sections = navLinks.map((l) => l.href.slice(1));
       for (let i = sections.length - 1; i >= 0; i--) {
         const el = document.getElementById(sections[i]);
@@ -29,7 +29,6 @@ const Navbar = () => {
       }
       setActiveSection("");
     };
-
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
@@ -37,9 +36,7 @@ const Navbar = () => {
   const handleNavClick = (href: string) => {
     setMobileOpen(false);
     const el = document.querySelector(href);
-    if (el) {
-      el.scrollIntoView({ behavior: "smooth" });
-    }
+    if (el) el.scrollIntoView({ behavior: "smooth" });
   };
 
   return (
@@ -69,22 +66,19 @@ const Navbar = () => {
           ))}
         </div>
 
-        <div className="hidden lg:flex items-center gap-5">
-          <a href="#pricing" className="font-body text-sm text-foreground hover:text-accent transition-colors">
-            INR Plans
-          </a>
+        <div className="hidden lg:flex items-center gap-4">
+          <button className="font-body text-sm text-foreground hover:text-accent transition-colors px-4 py-2">
+            Log in
+          </button>
           <button
             onClick={() => handleNavClick("#cta")}
             className="font-body text-sm bg-foreground text-background px-6 py-3 rounded-full hover:opacity-90 transition-all duration-300 font-medium"
           >
-            Start Exploring
+            Get Started Free
           </button>
         </div>
 
-        <button
-          className="lg:hidden text-foreground p-1"
-          onClick={() => setMobileOpen(!mobileOpen)}
-        >
+        <button className="lg:hidden text-foreground p-1" onClick={() => setMobileOpen(!mobileOpen)}>
           {mobileOpen ? <X size={24} /> : <Menu size={24} />}
         </button>
       </div>
@@ -110,9 +104,9 @@ const Navbar = () => {
               </button>
             ))}
             <div className="pt-3 border-t border-border/20 flex flex-col gap-2">
-              <a href="#pricing" className="font-body text-sm text-foreground py-2">INR Plans</a>
+              <button className="font-body text-sm text-foreground py-2 text-left">Log in</button>
               <button onClick={() => handleNavClick("#cta")} className="font-body text-sm bg-foreground text-background px-5 py-3 rounded-full text-center font-medium">
-                Start Exploring
+                Get Started Free
               </button>
             </div>
           </motion.div>
