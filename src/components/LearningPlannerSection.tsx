@@ -1,64 +1,58 @@
 import { useMemo, useState } from "react";
-import { CalendarDays, Clock3, IndianRupee, MapPin, Sparkles } from "lucide-react";
+import { CalendarDays, Clock3, DollarSign, MapPin, Sparkles, Monitor } from "lucide-react";
 import ScrollReveal from "./ScrollReveal";
 
-const cities = ["Bengaluru", "Mumbai", "Delhi NCR", "Hyderabad", "Pune", "Chennai"];
-const interests = ["Pottery", "Bharatanatyam", "Baking", "Photography", "Guitar", "Candle Making"];
-const budgets = ["Under ₹1,500", "₹1,500–₹3,000", "₹3,000+"];
-const formats = ["Weekend only", "Weekday evenings", "Online", "In-person"];
+const locations = ["Any Location", "New York", "London", "Online", "San Francisco", "Toronto", "Sydney"];
+const interests = ["Pottery", "Dance", "Baking", "Photography", "Guitar", "Candle Making"];
+const budgets = ["Under $30", "$30–$60", "$60+"];
+const formats = ["Weekend only", "Weekday evenings", "Online live", "Self-paced"];
 
-const recommendations = {
+const recommendations: Record<string, { title: string; price: string; format: string; note: string }> = {
   Pottery: {
     title: "Weekend Pottery Wheel Lab",
-    city: "Bengaluru",
-    price: "₹2,499",
+    price: "$49",
     format: "Weekend studio batch",
-    note: "Best for urban professionals looking for a tactile hobby and stress relief.",
+    note: "Best for professionals looking for a tactile, screen-free hobby with stress-relieving benefits.",
   },
-  Bharatanatyam: {
-    title: "Classical Movement Foundation",
-    city: "Chennai",
-    price: "₹1,800",
+  Dance: {
+    title: "Contemporary Movement Foundation",
+    price: "$35",
     format: "Weekday evening cohort",
-    note: "Great for learners seeking cultural depth, discipline, and performance confidence.",
+    note: "Great for learners seeking fitness, expression, and community through structured dance programs.",
   },
   Baking: {
-    title: "Home Baker to Pop-up Seller",
-    city: "Mumbai",
-    price: "₹2,999",
+    title: "Artisan Baking Essentials",
+    price: "$55",
     format: "Hybrid live + kitchen practice",
-    note: "Ideal for hobbyists exploring side-income potential through premium baked goods.",
+    note: "Ideal for hobbyists exploring side-income potential through premium baked goods and pop-ups.",
   },
   Photography: {
     title: "Street & Travel Photography Bootcamp",
-    city: "Delhi NCR",
-    price: "₹2,200",
+    price: "$42",
     format: "Weekend outdoor sessions",
     note: "Designed for creators who want better mobile and mirrorless photography output.",
   },
   Guitar: {
-    title: "Bollywood & Acoustic Guitar Starter",
-    city: "Pune",
-    price: "₹1,499",
+    title: "Acoustic Guitar Starter",
+    price: "$29",
     format: "Weekday evening live classes",
     note: "A practical beginner path built around familiar songs and performance milestones.",
   },
   "Candle Making": {
     title: "Scented Candle Studio Basics",
-    city: "Hyderabad",
-    price: "₹1,650",
+    price: "$35",
     format: "In-person maker workshop",
     note: "Popular with learners interested in gifting, home decor, and small-batch selling.",
   },
 };
 
 const LearningPlannerSection = () => {
-  const [selectedCity, setSelectedCity] = useState(cities[0]);
+  const [selectedLocation, setSelectedLocation] = useState(locations[0]);
   const [selectedInterest, setSelectedInterest] = useState(interests[0]);
   const [selectedBudget, setSelectedBudget] = useState(budgets[1]);
   const [selectedFormat, setSelectedFormat] = useState(formats[0]);
 
-  const recommendation = useMemo(() => recommendations[selectedInterest as keyof typeof recommendations], [selectedInterest]);
+  const recommendation = useMemo(() => recommendations[selectedInterest], [selectedInterest]);
 
   return (
     <section id="planner" className="section-warm border-y border-border/40">
@@ -67,19 +61,19 @@ const LearningPlannerSection = () => {
           <ScrollReveal direction="left">
             <div className="rounded-[2rem] border border-border/60 bg-card/80 backdrop-blur-sm p-6 sm:p-8 md:p-10 shadow-[0_20px_60px_-30px_hsl(var(--foreground)/0.18)]">
               <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">
-                Hobby planner for India
+                Smart class finder
               </span>
               <h2 className="font-heading text-4xl md:text-5xl lg:text-6xl font-light text-foreground mt-4 leading-[1.02]">
-                Find the right hobby by city, time, and budget<span className="text-primary">.</span>
+                Find the perfect class for your schedule and budget<span className="text-primary">.</span>
               </h2>
               <p className="font-body text-sm sm:text-base text-muted-foreground mt-5 max-w-xl leading-relaxed">
-                Urban hobby demand in India is strongest around weekend formats, evening batches, culturally rooted skills, and creator-friendly hobbies that can also become side gigs.
+                Tell us what you're looking for and we'll recommend the best classes — online or in-person — that match your preferences.
               </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-5 mt-8">
-                <PlannerGroup icon={MapPin} label="City" options={cities} value={selectedCity} onChange={setSelectedCity} />
+                <PlannerGroup icon={MapPin} label="Location" options={locations} value={selectedLocation} onChange={setSelectedLocation} />
                 <PlannerGroup icon={Sparkles} label="Interest" options={interests} value={selectedInterest} onChange={setSelectedInterest} />
-                <PlannerGroup icon={IndianRupee} label="Budget" options={budgets} value={selectedBudget} onChange={setSelectedBudget} />
+                <PlannerGroup icon={DollarSign} label="Budget" options={budgets} value={selectedBudget} onChange={setSelectedBudget} />
                 <PlannerGroup icon={Clock3} label="Format" options={formats} value={selectedFormat} onChange={setSelectedFormat} />
               </div>
             </div>
@@ -91,30 +85,25 @@ const LearningPlannerSection = () => {
               <div className="absolute -bottom-12 -left-10 w-40 h-40 rounded-full bg-primary/15 blur-[80px]" />
 
               <div className="relative z-10">
-                <p className="font-body text-xs tracking-[0.25em] uppercase text-accent">Recommended path</p>
+                <p className="font-body text-xs tracking-[0.25em] uppercase text-accent">Recommended for you</p>
                 <h3 className="font-heading text-3xl sm:text-4xl font-light mt-4 leading-tight">
                   {recommendation.title}
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-7">
-                  <InsightCard icon={MapPin} label="Suggested city" value={selectedCity || recommendation.city} />
-                  <InsightCard icon={CalendarDays} label="Best schedule" value={selectedFormat} />
-                  <InsightCard icon={IndianRupee} label="Expected fee" value={recommendation.price} />
-                  <InsightCard icon={Sparkles} label="Why it fits" value={selectedBudget} />
+                  <InsightCard icon={MapPin} label="Location" value={selectedLocation === "Any Location" ? "Online + Local" : selectedLocation} />
+                  <InsightCard icon={CalendarDays} label="Schedule" value={selectedFormat} />
+                  <InsightCard icon={DollarSign} label="Price" value={recommendation.price} />
+                  <InsightCard icon={Monitor} label="Format" value={selectedFormat.includes("Online") || selectedFormat.includes("Self") ? "Online" : "In-person"} />
                 </div>
 
                 <p className="font-body text-sm text-dark-muted mt-6 leading-relaxed">
                   {recommendation.note}
                 </p>
 
-                <div className="mt-7 rounded-2xl border border-dark-border bg-dark-foreground/5 p-5">
-                  <p className="font-body text-xs tracking-[0.2em] uppercase text-dark-muted">Market fit analysis</p>
-                  <ul className="mt-3 space-y-2.5 font-body text-sm text-dark-foreground/85 leading-relaxed">
-                    <li>• Weekend and after-work batches reduce drop-off for metro learners.</li>
-                    <li>• Cultural categories and maker hobbies perform well for discovery and gifting.</li>
-                    <li>• INR-led pricing and city context improve trust and purchase intent.</li>
-                  </ul>
-                </div>
+                <button className="mt-6 inline-flex items-center gap-2 bg-accent text-accent-foreground font-body text-sm px-6 py-3.5 rounded-full hover:brightness-110 transition-all duration-300 font-medium">
+                  Book This Class
+                </button>
               </div>
             </div>
           </ScrollReveal>
@@ -125,17 +114,9 @@ const LearningPlannerSection = () => {
 };
 
 const PlannerGroup = ({
-  icon: Icon,
-  label,
-  options,
-  value,
-  onChange,
+  icon: Icon, label, options, value, onChange,
 }: {
-  icon: typeof MapPin;
-  label: string;
-  options: string[];
-  value: string;
-  onChange: (value: string) => void;
+  icon: typeof MapPin; label: string; options: string[]; value: string; onChange: (v: string) => void;
 }) => (
   <div>
     <div className="flex items-center gap-2 mb-3">
