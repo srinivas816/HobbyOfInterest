@@ -25,7 +25,7 @@ const PORT = Number(process.env.PORT) || 3001;
 
 const corsOrigins = (process.env.CORS_ORIGIN || "http://localhost:8080,http://127.0.0.1:8080")
   .split(",")
-  .map((s) => s.trim())
+  .map((s) => s.trim().replace(/\/+$/, ""))
   .filter(Boolean);
 
 app.use(
@@ -35,6 +35,15 @@ app.use(
   }),
 );
 app.use(express.json({ limit: "1mb" }));
+
+app.get("/", (_req, res) => {
+  res.json({
+    ok: true,
+    service: "Hobby of Interest API",
+    health: "/api/health",
+    hint: "This URL is the backend. Open your Netlify/Vercel site for the app.",
+  });
+});
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
