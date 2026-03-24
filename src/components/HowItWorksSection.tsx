@@ -7,7 +7,8 @@ const steps = [
     icon: Search,
     step: "01",
     title: "Discover classes",
-    description: "Browse by hobby, location, format, or schedule. Find in-person studios near you or join live online sessions from anywhere.",
+    description:
+      "Browse by hobby, location, format, and price. Filter online vs in-person and explore instructor profiles from the catalog.",
     color: "bg-primary/10 text-primary",
     borderColor: "border-primary/20 hover:border-primary/40",
   },
@@ -31,7 +32,7 @@ const steps = [
     icon: Sparkles,
     step: "04",
     title: "Track & grow",
-    description: "Earn certificates, build a creator portfolio, track learning streaks, and even start teaching your own classes.",
+    description: "See progress on My learning, save classes to your wishlist, and — if you teach — publish from Instructor Studio.",
     color: "bg-accent/10 text-accent",
     borderColor: "border-accent/20 hover:border-accent/40",
   },
@@ -39,7 +40,7 @@ const steps = [
 
 const HowItWorksSection = () => (
   <section id="how-it-works" className="bg-background">
-    <div className="container mx-auto px-6 py-20 md:py-28">
+    <div className="container mx-auto py-20 md:py-28">
       <ScrollReveal>
         <div className="text-center max-w-2xl mx-auto">
           <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">

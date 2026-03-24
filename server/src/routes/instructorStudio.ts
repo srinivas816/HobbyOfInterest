@@ -1,0 +1,994 @@
+import { Router } from "express";
+import { z } from "zod";
+import { prisma } from "../lib/prisma.js";
+import { formatInrFromPaise } from "../lib/inr.js";
+import { authRequired, type AuthedRequest } from "../middleware/auth.js";
+import { pathParam } from "../lib/httpParams.js";
+import { broadcastToLearners } from "../lib/smtpBroadcast.js";
+
+const router = Router();
+
+const sectionSchema = z.object({
+  courseSlug: z.string().min(1),
+  title: z.string().min(3).max(120),
+});
+
+const lessonSchema = z.object({
+  sectionId: z.string().min(1),
+  title: z.string().min(3).max(120),
+  durationMin: z.number().int().min(1).max(300),
+  preview: z.boolean().optional(),
+  videoUrl: z.string().url().max(2048).optional(),
+});
+
+const lessonPatchSchema = z.object({
+  videoUrl: z.union([z.string().url().max(2048), z.null()]).optional(),
+  title: z.string().min(3).max(120).optional(),
+  durationMin: z.number().int().min(1).max(300).optional(),
+  preview: z.boolean().optional(),
+});
+
+const sectionTitleSchema = z.object({
+  title: z.string().min(3).max(120),
+});
+
+const moveSchema = z.object({
+  direction: z.enum(["up", "down"]),
+});
+
+const profileSchema = z.object({
+  name: z.string().min(2).max(120),
+  specialty: z.string().min(2).max(160),
+});
+
+const courseCreateSchema = z.object({
+  title: z.string().min(4).max(160),
+  category: z.string().min(2).max(120),
+  format: z.enum(["ONLINE", "IN_PERSON"]),
+  city: z.string().max(120).nullable().optional(),
+  durationLabel: z.string().min(2).max(80),
+  priceInr: z.number().int().min(99).max(999999),
+  description: z.string().min(20).max(5000),
+  outcomes: z.string().min(10).max(4000),
+  imageKey: z.string().min(2).max(120).optional(),
+  coverImageUrl: z.string().url().max(2048).optional(),
+  published: z.boolean().optional(),
+});
+
+const announcementCreateSchema = z.object({
+  title: z.string().max(200).optional(),
+  body: z.string().min(10).max(8000),
+  emailLearners: z.boolean().optional(),
+});
+
+const assignmentCreateSchema = z.object({
+  title: z.string().min(3).max(160),
+  description: z.string().min(10).max(8000),
+  dueAt: z.string().max(40).optional().nullable(),
+});
+
+const taxProfileSchema = z.object({
+  legalName: z.string().max(120).optional().nullable(),
+  panLast4: z.string().max(10).optional().nullable(),
+  gstin: z.string().max(20).optional().nullable(),
+});
+
+const payoutRequestSchema = z.object({
+  amountInr: z.number().int().min(1).max(10_000_000),
+  note: z.string().max(500).optional(),
+});
+
+const courseUpdateSchema = z.object({
+  title: z.string().min(4).max(160).optional(),
+  category: z.string().min(2).max(120).optional(),
+  format: z.enum(["ONLINE", "IN_PERSON"]).optional(),
+  city: z.string().max(120).nullable().optional(),
+  durationLabel: z.string().min(2).max(80).optional(),
+  priceInr: z.number().int().min(99).max(999999).optional(),
+  description: z.string().min(20).max(5000).optional(),
+  outcomes: z.string().min(10).max(4000).optional(),
+  imageKey: z.string().min(2).max(120).optional(),
+  coverImageUrl: z.union([z.string().url().max(2048), z.null()]).optional(),
+  published: z.boolean().optional(),
+});
+
+function slugify(input: string): string {
+  return input
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .slice(0, 80);
+}
+
+async function assertInstructor(req: AuthedRequest) {
+  const me = await prisma.user.findUnique({
+    where: { id: req.userId! },
+    select: { role: true },
+  });
+  return me?.role === "INSTRUCTOR";
+}
+
+router.get("/analytics", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+
+  const courses = await prisma.course.findMany({
+    where: { instructorId: req.userId! },
+    select: {
+      id: true,
+      slug: true,
+      title: true,
+      published: true,
+      _count: { select: { enrollments: true } },
+      sections: {
+        select: {
+          lessons: { select: { id: true } },
+        },
+      },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+
+  const coursesOut = await Promise.all(
+    courses.map(async (c) => {
+      const lessonIds = c.sections.flatMap((s) => s.lessons.map((l) => l.id));
+      const totalLessons = lessonIds.length;
+      const enrolled = await prisma.enrollment.findMany({
+        where: { courseId: c.id },
+        select: { userId: true },
+      });
+
+      let avgCompletionPercent = 0;
+      if (totalLessons > 0 && enrolled.length > 0) {
+        let sum = 0;
+        for (const { userId } of enrolled) {
+          const done = await prisma.lessonProgress.count({
+            where: { userId, lessonId: { in: lessonIds } },
+          });
+          sum += (done / totalLessons) * 100;
+        }
+        avgCompletionPercent = Math.round(sum / enrolled.length);
+      }
+
+      return {
+        slug: c.slug,
+        title: c.title,
+        published: c.published,
+        enrollmentCount: c._count.enrollments,
+        totalLessons,
+        avgCompletionPercent,
+      };
+    }),
+  );
+
+  const totalEnrollments = coursesOut.reduce((acc, row) => acc + row.enrollmentCount, 0);
+
+  res.json({
+    courses: coursesOut,
+    totals: { enrollments: totalEnrollments, classes: coursesOut.length },
+  });
+});
+
+router.get("/profile", authRequired, async (req: AuthedRequest, res) => {
+  const me = await prisma.user.findUnique({
+    where: { id: req.userId! },
+    select: { id: true, email: true, name: true, role: true, specialty: true, instructorStudents: true, instructorClasses: true },
+  });
+  if (!me) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  if (me.role !== "INSTRUCTOR") {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  res.json({ profile: me });
+});
+
+router.patch("/profile", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = profileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const updated = await prisma.user.update({
+    where: { id: req.userId! },
+    data: {
+      name: parsed.data.name,
+      specialty: parsed.data.specialty,
+    },
+    select: { id: true, name: true, specialty: true },
+  });
+  res.json({ profile: updated });
+});
+
+router.get("/courses", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const courses = await prisma.course.findMany({
+    where: { instructorId: req.userId! },
+    orderBy: { createdAt: "desc" },
+    include: {
+      sections: {
+        orderBy: { sortOrder: "asc" },
+        include: { lessons: { orderBy: { sortOrder: "asc" } } },
+      },
+    },
+  });
+  res.json({
+    courses: courses.map((c) => ({
+      id: c.id,
+      slug: c.slug,
+      title: c.title,
+      description: c.description,
+      category: c.category,
+      format: c.format,
+      city: c.city,
+      durationLabel: c.durationLabel,
+      priceCents: c.priceCents,
+      priceDisplay: formatInrFromPaise(c.priceCents),
+      outcomes: c.outcomes,
+      imageKey: c.imageKey,
+      coverImageUrl: c.coverImageUrl,
+      published: c.published,
+      sections: c.sections.map((s) => ({
+        id: s.id,
+        title: s.title,
+        sortOrder: s.sortOrder,
+        lessons: s.lessons.map((l) => ({
+          id: l.id,
+          title: l.title,
+          durationMin: l.durationMin,
+          videoUrl: l.videoUrl,
+          preview: l.preview,
+          sortOrder: l.sortOrder,
+        })),
+      })),
+    })),
+  });
+});
+
+router.post("/courses", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = courseCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const base = slugify(parsed.data.title);
+  let slug = base || "untitled-class";
+  let n = 1;
+  while (await prisma.course.findUnique({ where: { slug } })) {
+    n += 1;
+    slug = `${base}-${n}`;
+  }
+
+  const created = await prisma.course.create({
+    data: {
+      slug,
+      title: parsed.data.title,
+      description: parsed.data.description,
+      category: parsed.data.category,
+      format: parsed.data.format,
+      locationLabel: parsed.data.format === "ONLINE" ? "Online" : "In-person",
+      city: parsed.data.format === "ONLINE" ? null : (parsed.data.city ?? "Mumbai"),
+      durationLabel: parsed.data.durationLabel,
+      priceCents: parsed.data.priceInr * 100,
+      outcomes: parsed.data.outcomes,
+      imageKey: parsed.data.imageKey ?? "hero-pottery",
+      coverImageUrl: parsed.data.coverImageUrl ?? null,
+      rating: 4.8,
+      studentCount: 0,
+      badge: "New",
+      plannerTag: null,
+      published: parsed.data.published ?? false,
+      instructorId: req.userId!,
+    },
+    select: { id: true, slug: true },
+  });
+
+  await prisma.user.update({
+    where: { id: req.userId! },
+    data: { instructorClasses: { increment: 1 } },
+  });
+
+  res.status(201).json({ course: created });
+});
+
+router.patch("/courses/:slug", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = courseUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const courseSlug = pathParam(req.params.slug);
+  if (!courseSlug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const owned = await prisma.course.findFirst({
+    where: { slug: courseSlug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!owned) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const updated = await prisma.course.update({
+    where: { id: owned.id },
+    data: {
+      ...(parsed.data.title ? { title: parsed.data.title } : {}),
+      ...(parsed.data.description ? { description: parsed.data.description } : {}),
+      ...(parsed.data.category ? { category: parsed.data.category } : {}),
+      ...(parsed.data.durationLabel ? { durationLabel: parsed.data.durationLabel } : {}),
+      ...(typeof parsed.data.priceInr === "number" ? { priceCents: parsed.data.priceInr * 100 } : {}),
+      ...(parsed.data.outcomes ? { outcomes: parsed.data.outcomes } : {}),
+      ...(parsed.data.imageKey ? { imageKey: parsed.data.imageKey } : {}),
+      ...(typeof parsed.data.coverImageUrl !== "undefined" ? { coverImageUrl: parsed.data.coverImageUrl } : {}),
+      ...(typeof parsed.data.published === "boolean" ? { published: parsed.data.published } : {}),
+      ...(parsed.data.format
+        ? {
+            format: parsed.data.format,
+            locationLabel: parsed.data.format === "ONLINE" ? "Online" : "In-person",
+            city: parsed.data.format === "ONLINE" ? null : (parsed.data.city ?? "Mumbai"),
+          }
+        : {}),
+      ...(typeof parsed.data.city !== "undefined" ? { city: parsed.data.city } : {}),
+    },
+    select: { id: true, slug: true, published: true },
+  });
+  res.json({ course: updated });
+});
+
+router.get("/courses/:slug/roster", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true, title: true, slug: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const rows = await prisma.enrollment.findMany({
+    where: { courseId: course.id },
+    orderBy: { createdAt: "desc" },
+    include: { user: { select: { id: true, name: true, email: true } } },
+  });
+  res.json({
+    course: { title: course.title, slug: course.slug },
+    students: rows.map((e) => ({
+      enrollmentId: e.id,
+      enrolledAt: e.createdAt.toISOString(),
+      learner: { id: e.user.id, name: e.user.name, email: e.user.email },
+    })),
+  });
+});
+
+router.post("/sections", authRequired, async (req: AuthedRequest, res) => {
+  const parsed = sectionSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug: parsed.data.courseSlug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const max = await prisma.courseSection.aggregate({
+    where: { courseId: course.id },
+    _max: { sortOrder: true },
+  });
+  const section = await prisma.courseSection.create({
+    data: {
+      courseId: course.id,
+      title: parsed.data.title,
+      sortOrder: (max._max.sortOrder ?? 0) + 1,
+    },
+  });
+  res.status(201).json({ section });
+});
+
+router.post("/lessons", authRequired, async (req: AuthedRequest, res) => {
+  const parsed = lessonSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const section = await prisma.courseSection.findFirst({
+    where: {
+      id: parsed.data.sectionId,
+      course: { instructorId: req.userId! },
+    },
+    select: { id: true },
+  });
+  if (!section) {
+    res.status(404).json({ error: "Section not found for this instructor" });
+    return;
+  }
+  const max = await prisma.lesson.aggregate({
+    where: { sectionId: section.id },
+    _max: { sortOrder: true },
+  });
+  const lesson = await prisma.lesson.create({
+    data: {
+      sectionId: section.id,
+      title: parsed.data.title,
+      durationMin: parsed.data.durationMin,
+      preview: Boolean(parsed.data.preview),
+      videoUrl: parsed.data.videoUrl ?? null,
+      sortOrder: (max._max.sortOrder ?? 0) + 1,
+    },
+  });
+  res.status(201).json({ lesson });
+});
+
+router.patch("/lessons/:lessonId", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = lessonPatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const lessonIdParam = pathParam(req.params.lessonId);
+  if (!lessonIdParam) {
+    res.status(400).json({ error: "Invalid lesson id" });
+    return;
+  }
+  const lesson = await prisma.lesson.findFirst({
+    where: {
+      id: lessonIdParam,
+      section: { course: { instructorId: req.userId! } },
+    },
+    select: { id: true },
+  });
+  if (!lesson) {
+    res.status(404).json({ error: "Lesson not found" });
+    return;
+  }
+  const updated = await prisma.lesson.update({
+    where: { id: lesson.id },
+    data: {
+      ...(typeof parsed.data.videoUrl !== "undefined" ? { videoUrl: parsed.data.videoUrl } : {}),
+      ...(parsed.data.title ? { title: parsed.data.title } : {}),
+      ...(typeof parsed.data.durationMin === "number" ? { durationMin: parsed.data.durationMin } : {}),
+      ...(typeof parsed.data.preview === "boolean" ? { preview: parsed.data.preview } : {}),
+    },
+    select: { id: true, videoUrl: true, title: true, durationMin: true, preview: true },
+  });
+  res.json({ lesson: updated });
+});
+
+router.patch("/sections/:sectionId", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const sectionId = pathParam(req.params.sectionId);
+  if (!sectionId) {
+    res.status(400).json({ error: "Invalid section id" });
+    return;
+  }
+  const parsed = sectionTitleSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const section = await prisma.courseSection.findFirst({
+    where: { id: sectionId, course: { instructorId: req.userId! } },
+    select: { id: true },
+  });
+  if (!section) {
+    res.status(404).json({ error: "Section not found" });
+    return;
+  }
+  await prisma.courseSection.update({
+    where: { id: section.id },
+    data: { title: parsed.data.title.trim() },
+  });
+  res.json({ ok: true });
+});
+
+router.post("/sections/:sectionId/move", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const sectionId = pathParam(req.params.sectionId);
+  if (!sectionId) {
+    res.status(400).json({ error: "Invalid section id" });
+    return;
+  }
+  const parsed = moveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const section = await prisma.courseSection.findFirst({
+    where: { id: sectionId, course: { instructorId: req.userId! } },
+    select: { id: true, courseId: true },
+  });
+  if (!section) {
+    res.status(404).json({ error: "Section not found" });
+    return;
+  }
+  const siblings = await prisma.courseSection.findMany({
+    where: { courseId: section.courseId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, sortOrder: true },
+  });
+  const idx = siblings.findIndex((s) => s.id === section.id);
+  const swapIdx = parsed.data.direction === "up" ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= siblings.length) {
+    res.status(400).json({ error: "Cannot move further in this direction" });
+    return;
+  }
+  const a = siblings[idx]!;
+  const b = siblings[swapIdx]!;
+  await prisma.$transaction([
+    prisma.courseSection.update({ where: { id: a.id }, data: { sortOrder: b.sortOrder } }),
+    prisma.courseSection.update({ where: { id: b.id }, data: { sortOrder: a.sortOrder } }),
+  ]);
+  res.json({ ok: true });
+});
+
+router.delete("/sections/:sectionId", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const sectionId = pathParam(req.params.sectionId);
+  if (!sectionId) {
+    res.status(400).json({ error: "Invalid section id" });
+    return;
+  }
+  const section = await prisma.courseSection.findFirst({
+    where: { id: sectionId, course: { instructorId: req.userId! } },
+    select: { id: true },
+  });
+  if (!section) {
+    res.status(404).json({ error: "Section not found" });
+    return;
+  }
+  await prisma.courseSection.delete({ where: { id: section.id } });
+  res.json({ ok: true });
+});
+
+router.post("/lessons/:lessonId/move", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const lessonId = pathParam(req.params.lessonId);
+  if (!lessonId) {
+    res.status(400).json({ error: "Invalid lesson id" });
+    return;
+  }
+  const parsed = moveSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, section: { course: { instructorId: req.userId! } } },
+    select: { id: true, sectionId: true },
+  });
+  if (!lesson) {
+    res.status(404).json({ error: "Lesson not found" });
+    return;
+  }
+  const siblings = await prisma.lesson.findMany({
+    where: { sectionId: lesson.sectionId },
+    orderBy: { sortOrder: "asc" },
+    select: { id: true, sortOrder: true },
+  });
+  const idx = siblings.findIndex((l) => l.id === lesson.id);
+  const swapIdx = parsed.data.direction === "up" ? idx - 1 : idx + 1;
+  if (swapIdx < 0 || swapIdx >= siblings.length) {
+    res.status(400).json({ error: "Cannot move further in this direction" });
+    return;
+  }
+  const a = siblings[idx]!;
+  const b = siblings[swapIdx]!;
+  await prisma.$transaction([
+    prisma.lesson.update({ where: { id: a.id }, data: { sortOrder: b.sortOrder } }),
+    prisma.lesson.update({ where: { id: b.id }, data: { sortOrder: a.sortOrder } }),
+  ]);
+  res.json({ ok: true });
+});
+
+router.delete("/lessons/:lessonId", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const lessonId = pathParam(req.params.lessonId);
+  if (!lessonId) {
+    res.status(400).json({ error: "Invalid lesson id" });
+    return;
+  }
+  const lesson = await prisma.lesson.findFirst({
+    where: { id: lessonId, section: { course: { instructorId: req.userId! } } },
+    select: { id: true },
+  });
+  if (!lesson) {
+    res.status(404).json({ error: "Lesson not found" });
+    return;
+  }
+  await prisma.lesson.delete({ where: { id: lesson.id } });
+  res.json({ ok: true });
+});
+
+/** Demo accrual: ₹500 (50_000 paise) per enrollment — not real revenue. */
+const DEMO_EARNING_PAISE_PER_ENROLLMENT = 50_000;
+
+router.post("/courses/:slug/announcements", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const parsed = announcementCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true, title: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const ann = await prisma.courseAnnouncement.create({
+    data: {
+      courseId: course.id,
+      authorId: req.userId!,
+      title: parsed.data.title?.trim() || null,
+      body: parsed.data.body.trim(),
+      emailed: false,
+    },
+  });
+  let emailMeta: { attempted: boolean; ok?: boolean; skipped?: string; error?: string } = { attempted: false };
+  if (parsed.data.emailLearners) {
+    const enrollments = await prisma.enrollment.findMany({
+      where: { courseId: course.id },
+      include: { user: { select: { email: true } } },
+    });
+    const bcc = [...new Set(enrollments.map((e) => e.user.email.toLowerCase()))];
+    const subjectLine = parsed.data.title?.trim()
+      ? `${parsed.data.title.trim()} — ${course.title}`
+      : `Update from your instructor — ${course.title}`;
+    const bodyText = `${parsed.data.title ? `${parsed.data.title.trim()}\n\n` : ""}${parsed.data.body.trim()}`;
+    const sent = await broadcastToLearners({ bcc, subject: subjectLine, text: bodyText });
+    emailMeta = { attempted: true, ok: sent.ok, skipped: sent.skipped, error: sent.error };
+    if (sent.ok) {
+      await prisma.courseAnnouncement.update({ where: { id: ann.id }, data: { emailed: true } });
+    }
+  }
+  res.status(201).json({
+    announcement: {
+      id: ann.id,
+      title: ann.title,
+      body: ann.body,
+      emailed: emailMeta.ok ? true : ann.emailed,
+      createdAt: ann.createdAt.toISOString(),
+    },
+    email: emailMeta,
+  });
+});
+
+router.get("/courses/:slug/assignments", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const rows = await prisma.courseAssignment.findMany({
+    where: { courseId: course.id },
+    orderBy: { createdAt: "desc" },
+    include: { _count: { select: { submissions: true } } },
+  });
+  res.json({
+    assignments: rows.map((a) => ({
+      id: a.id,
+      title: a.title,
+      description: a.description,
+      dueAt: a.dueAt?.toISOString() ?? null,
+      submissionCount: a._count.submissions,
+      createdAt: a.createdAt.toISOString(),
+    })),
+  });
+});
+
+router.post("/courses/:slug/assignments", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const parsed = assignmentCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  let dueAt: Date | null = null;
+  if (parsed.data.dueAt && parsed.data.dueAt.trim()) {
+    const d = new Date(parsed.data.dueAt);
+    if (Number.isNaN(d.getTime())) {
+      res.status(400).json({ error: "Invalid dueAt date" });
+      return;
+    }
+    dueAt = d;
+  }
+  const created = await prisma.courseAssignment.create({
+    data: {
+      courseId: course.id,
+      title: parsed.data.title.trim(),
+      description: parsed.data.description.trim(),
+      dueAt,
+    },
+  });
+  res.status(201).json({
+    assignment: {
+      id: created.id,
+      title: created.title,
+      description: created.description,
+      dueAt: created.dueAt?.toISOString() ?? null,
+    },
+  });
+});
+
+router.delete("/assignments/:assignmentId", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const assignmentId = pathParam(req.params.assignmentId);
+  if (!assignmentId) {
+    res.status(400).json({ error: "Invalid assignment id" });
+    return;
+  }
+  const row = await prisma.courseAssignment.findFirst({
+    where: { id: assignmentId, course: { instructorId: req.userId! } },
+    select: { id: true },
+  });
+  if (!row) {
+    res.status(404).json({ error: "Assignment not found" });
+    return;
+  }
+  await prisma.courseAssignment.delete({ where: { id: row.id } });
+  res.json({ ok: true });
+});
+
+router.get("/assignments/:assignmentId/submissions", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const assignmentId = pathParam(req.params.assignmentId);
+  if (!assignmentId) {
+    res.status(400).json({ error: "Invalid assignment id" });
+    return;
+  }
+  const assignment = await prisma.courseAssignment.findFirst({
+    where: { id: assignmentId, course: { instructorId: req.userId! } },
+    include: {
+      course: { select: { slug: true, title: true } },
+      submissions: {
+        orderBy: { updatedAt: "desc" },
+        include: { user: { select: { id: true, name: true, email: true } } },
+      },
+    },
+  });
+  if (!assignment) {
+    res.status(404).json({ error: "Assignment not found" });
+    return;
+  }
+  res.json({
+    assignment: {
+      id: assignment.id,
+      title: assignment.title,
+      course: assignment.course,
+    },
+    submissions: assignment.submissions.map((s) => ({
+      user: s.user,
+      content: s.content,
+      updatedAt: s.updatedAt.toISOString(),
+    })),
+  });
+});
+
+router.get("/payouts/summary", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const uid = req.userId!;
+  const enrollmentCount = await prisma.enrollment.count({
+    where: { course: { instructorId: uid } },
+  });
+  const accruedPaise = enrollmentCount * DEMO_EARNING_PAISE_PER_ENROLLMENT;
+  const paidAgg = await prisma.payoutRequest.aggregate({
+    where: { instructorId: uid, status: "PAID" },
+    _sum: { amountCents: true },
+  });
+  const paidOutPaise = paidAgg._sum.amountCents ?? 0;
+  const pendingAgg = await prisma.payoutRequest.aggregate({
+    where: { instructorId: uid, status: { in: ["PENDING", "APPROVED"] } },
+    _sum: { amountCents: true },
+  });
+  const heldPaise = pendingAgg._sum.amountCents ?? 0;
+  const availablePaise = Math.max(0, accruedPaise - paidOutPaise - heldPaise);
+  const tax = await prisma.instructorTaxProfile.findUnique({ where: { userId: uid } });
+  const requests = await prisma.payoutRequest.findMany({
+    where: { instructorId: uid },
+    orderBy: { createdAt: "desc" },
+    take: 30,
+  });
+  res.json({
+    demoNote:
+      "Balances use a demo formula (₹500 per enrollment) for UI only — not legal or accounting advice. Wire real payouts with counsel + payment provider.",
+    enrollmentCount,
+    accruedDisplay: formatInrFromPaise(accruedPaise),
+    paidOutDisplay: formatInrFromPaise(paidOutPaise),
+    pendingHoldDisplay: formatInrFromPaise(heldPaise),
+    availablePaise,
+    availableDisplay: formatInrFromPaise(availablePaise),
+    taxProfile: tax
+      ? { legalName: tax.legalName, panLast4: tax.panLast4, gstin: tax.gstin }
+      : null,
+    requests: requests.map((r) => ({
+      id: r.id,
+      amountDisplay: formatInrFromPaise(r.amountCents),
+      amountPaise: r.amountCents,
+      status: r.status,
+      instructorNote: r.instructorNote,
+      adminNote: r.adminNote,
+      createdAt: r.createdAt.toISOString(),
+    })),
+  });
+});
+
+router.patch("/payouts/tax-profile", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = taxProfileSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const row = await prisma.instructorTaxProfile.upsert({
+    where: { userId: req.userId! },
+    create: {
+      userId: req.userId!,
+      legalName: parsed.data.legalName?.trim() || null,
+      panLast4: parsed.data.panLast4?.trim() || null,
+      gstin: parsed.data.gstin?.trim() || null,
+    },
+    update: {
+      legalName: parsed.data.legalName === undefined ? undefined : parsed.data.legalName?.trim() || null,
+      panLast4: parsed.data.panLast4 === undefined ? undefined : parsed.data.panLast4?.trim() || null,
+      gstin: parsed.data.gstin === undefined ? undefined : parsed.data.gstin?.trim() || null,
+    },
+  });
+  res.json({
+    taxProfile: { legalName: row.legalName, panLast4: row.panLast4, gstin: row.gstin },
+  });
+});
+
+router.post("/payouts/request", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = payoutRequestSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const uid = req.userId!;
+  const enrollmentCount = await prisma.enrollment.count({
+    where: { course: { instructorId: uid } },
+  });
+  const accruedPaise = enrollmentCount * DEMO_EARNING_PAISE_PER_ENROLLMENT;
+  const paidAgg = await prisma.payoutRequest.aggregate({
+    where: { instructorId: uid, status: "PAID" },
+    _sum: { amountCents: true },
+  });
+  const paidOutPaise = paidAgg._sum.amountCents ?? 0;
+  const pendingAgg = await prisma.payoutRequest.aggregate({
+    where: { instructorId: uid, status: { in: ["PENDING", "APPROVED"] } },
+    _sum: { amountCents: true },
+  });
+  const heldPaise = pendingAgg._sum.amountCents ?? 0;
+  const availablePaise = Math.max(0, accruedPaise - paidOutPaise - heldPaise);
+  const requestPaise = parsed.data.amountInr * 100;
+  if (requestPaise > availablePaise) {
+    res.status(400).json({ error: "Amount exceeds available demo balance" });
+    return;
+  }
+  if (requestPaise < 100) {
+    res.status(400).json({ error: "Minimum request ₹1 (100 paise)" });
+    return;
+  }
+  const created = await prisma.payoutRequest.create({
+    data: {
+      instructorId: uid,
+      amountCents: requestPaise,
+      instructorNote: parsed.data.note?.trim() || null,
+    },
+  });
+  res.status(201).json({
+    request: {
+      id: created.id,
+      amountDisplay: formatInrFromPaise(created.amountCents),
+      status: created.status,
+      createdAt: created.createdAt.toISOString(),
+    },
+  });
+});
+
+export default router;

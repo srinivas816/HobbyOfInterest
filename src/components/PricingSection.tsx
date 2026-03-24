@@ -22,17 +22,17 @@ const plans = [
   },
   {
     name: "Creator Plus",
-    monthlyPrice: 12,
-    yearlyPrice: 99,
+    monthlyPrice: 799,
+    yearlyPrice: 6499,
     description: "For hobby learners who want unlimited access and premium features",
     features: [
-      "Unlimited live & recorded classes",
-      "Priority booking for popular sessions",
-      "Learning streaks & certificates",
-      "Community cohort access",
-      "Instructor messaging",
-      "Exclusive workshops & events",
-      "Progress portfolio builder",
+      "Unlimited live & recorded classes (when billing ships)",
+      "Priority booking for popular sessions (roadmap)",
+      "Learning streaks & certificates (roadmap)",
+      "Community cohort access (roadmap)",
+      "Instructor messaging (roadmap)",
+      "Exclusive workshops & events (roadmap)",
+      "Lesson progress & Continue learning (live today)",
     ],
     cta: "Start 7-Day Free Trial",
     popular: true,
@@ -40,8 +40,8 @@ const plans = [
   },
   {
     name: "Instructor Pro",
-    monthlyPrice: 29,
-    yearlyPrice: 249,
+    monthlyPrice: 1999,
+    yearlyPrice: 16499,
     description: "For creators and studios who want to teach and grow their business",
     features: [
       "Unlimited class listings",
@@ -58,23 +58,22 @@ const plans = [
   },
 ];
 
+const formatRupees = (n: number) =>
+  n === 0 ? "0" : `₹${n.toLocaleString("en-IN", { maximumFractionDigits: 0 })}`;
+
 const PricingSection = () => {
   const [annual, setAnnual] = useState(true);
 
   return (
     <section id="pricing" className="section-warm">
-      <div className="container mx-auto px-6 py-20 md:py-28">
+      <div className="container mx-auto py-20 md:py-28">
         <ScrollReveal>
           <div className="text-center max-w-2xl mx-auto">
-            <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">
-              Simple pricing
-            </span>
+            <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">Simple pricing</span>
             <h2 className="font-heading text-4xl md:text-5xl lg:text-6xl font-light text-foreground mt-4">
               Plans that grow with your creative journey<span className="text-accent">.</span>
             </h2>
-            <p className="font-body text-sm text-muted-foreground mt-4">
-              Start free. Upgrade when you're ready. Cancel anytime.
-            </p>
+            <p className="font-body text-sm text-muted-foreground mt-4">Prices in INR. Start free. Upgrade when you&apos;re ready. Cancel anytime.</p>
           </div>
         </ScrollReveal>
 
@@ -82,14 +81,19 @@ const PricingSection = () => {
           <div className="flex items-center justify-center gap-4 mt-10">
             <span className={`font-body text-sm transition-colors ${!annual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</span>
             <button
+              type="button"
               onClick={() => setAnnual(!annual)}
               className={`relative w-14 h-7 rounded-full transition-colors duration-300 ${annual ? "bg-accent" : "bg-border"}`}
             >
-              <div className={`absolute top-0.5 h-6 w-6 rounded-full bg-background shadow-md transition-transform duration-300 ${annual ? "translate-x-7" : "translate-x-0.5"}`} />
+              <div
+                className={`absolute top-0.5 h-6 w-6 rounded-full bg-background shadow-md transition-transform duration-300 ${
+                  annual ? "translate-x-7" : "translate-x-0.5"
+                }`}
+              />
             </button>
             <span className={`font-body text-sm transition-colors ${annual ? "text-foreground" : "text-muted-foreground"}`}>
               Annual
-              <span className="ml-1.5 text-xs text-accent font-medium">Save 30%</span>
+              <span className="ml-1.5 text-xs text-accent font-medium">Save ~30%</span>
             </span>
           </div>
         </ScrollReveal>
@@ -107,7 +111,7 @@ const PricingSection = () => {
                 <p className={`font-body text-sm mt-2 ${plan.popular ? "text-dark-muted" : "text-muted-foreground"}`}>{plan.description}</p>
                 <div className="mt-6 mb-6">
                   <span className={`font-heading text-5xl font-light ${plan.popular ? "text-dark-foreground" : "text-foreground"}`}>
-                    ${annual ? plan.yearlyPrice : plan.monthlyPrice}
+                    {formatRupees(annual ? plan.yearlyPrice : plan.monthlyPrice)}
                   </span>
                   <span className={`font-body text-sm ml-1 ${plan.popular ? "text-dark-muted" : "text-muted-foreground"}`}>
                     /{annual ? "year" : "month"}
@@ -122,7 +126,7 @@ const PricingSection = () => {
                   ))}
                 </ul>
                 <a
-                  href="#cta"
+                  href={plan.name === "Instructor Pro" ? "/login?mode=register&next=/instructor/studio" : "/login?mode=register&next=/learn"}
                   className={`inline-flex items-center justify-center gap-2 font-body text-sm px-6 py-4 rounded-full transition-all duration-300 font-medium w-full ${
                     plan.popular
                       ? "bg-accent text-accent-foreground hover:brightness-110 shadow-lg shadow-accent/25"

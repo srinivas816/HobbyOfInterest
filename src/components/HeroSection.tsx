@@ -1,6 +1,8 @@
 import { useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { ArrowRight, Star } from "lucide-react";
+import { Sparkles, Star } from "lucide-react";
+import { useAuth } from "@/context/AuthContext";
 import ScrollReveal from "./ScrollReveal";
 import heroPottery from "@/assets/hero-pottery.jpg";
 import heroPainting from "@/assets/hero-painting.jpg";
@@ -22,10 +24,17 @@ const trendingSearches = [
 
 const HeroSection = () => {
   const [searchQuery, setSearchQuery] = useState("");
+  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const goSearch = () => {
+    const q = searchQuery.trim();
+    navigate(q ? `/courses?q=${encodeURIComponent(q)}` : "/courses");
+  };
 
   return (
     <section className="hero-gradient overflow-hidden">
-      <div className="container mx-auto px-6 pt-12 pb-16 md:pt-20 md:pb-28 lg:pt-24 lg:pb-32">
+      <div className="container mx-auto pt-12 pb-16 md:pt-20 md:pb-28 lg:pt-24 lg:pb-32">
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-10 lg:gap-16 items-center">
           <div>
             <ScrollReveal direction="up" delay={0}>
@@ -55,13 +64,32 @@ const HeroSection = () => {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && goSearch()}
                   placeholder="Search pottery classes, online baking, guitar lessons..."
                   className="flex-1 min-w-0 px-4 sm:px-6 py-4 sm:py-5 font-body text-sm bg-transparent text-foreground placeholder:text-muted-foreground outline-none"
                 />
-                <button className="bg-accent text-accent-foreground px-6 sm:px-8 py-4 sm:py-5 font-heading text-base sm:text-lg font-semibold hover:brightness-110 transition-all duration-300 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={goSearch}
+                  className="bg-accent text-accent-foreground px-6 sm:px-8 py-4 sm:py-5 font-heading text-base sm:text-lg font-semibold hover:brightness-110 transition-all duration-300 flex-shrink-0"
+                >
                   Explore
                 </button>
               </div>
+              {user?.role === "INSTRUCTOR" ? (
+                <div className="mt-5 flex flex-wrap items-center gap-3">
+                  <Link
+                    to="/instructor/studio"
+                    className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
+                  >
+                    <Sparkles size={16} />
+                    Create a class in Studio
+                  </Link>
+                  <span className="font-body text-xs text-muted-foreground max-w-xs">
+                    Your teaching home — new sessions, lessons, and publish flow.
+                  </span>
+                </div>
+              ) : null}
               <div className="flex flex-wrap gap-2 mt-4">
                 {trendingSearches.map((item) => (
                   <button

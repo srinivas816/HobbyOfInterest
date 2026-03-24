@@ -1,4 +1,4 @@
-import Navbar from "@/components/Navbar";
+import PostAuthBanner from "@/components/PostAuthBanner";
 import HeroSection from "@/components/HeroSection";
 import TrustedBySection from "@/components/TrustedBySection";
 import StatsBar from "@/components/StatsBar";
@@ -14,13 +14,11 @@ import FAQSection from "@/components/FAQSection";
 import AppDownloadSection from "@/components/AppDownloadSection";
 import NewsletterSection from "@/components/NewsletterSection";
 import CTASection from "@/components/CTASection";
-import Footer from "@/components/Footer";
-import BackToTop from "@/components/BackToTop";
 
 const Index = () => {
   return (
-    <div className="min-h-screen bg-background scroll-smooth">
-      <Navbar />
+    <>
+      <PostAuthBanner />
       <HeroSection />
       <TrustedBySection />
       <StatsBar />
@@ -36,9 +34,7 @@ const Index = () => {
       <AppDownloadSection />
       <NewsletterSection />
       <CTASection />
-      <Footer />
-      <BackToTop />
-    </div>
+    </>
   );
 };
 

@@ -71,7 +71,7 @@ const testimonials = [
 
 const TestimonialsSection = () => (
   <section id="testimonials" className="bg-background overflow-hidden">
-    <div className="container mx-auto px-6 py-16 md:py-24">
+    <div className="container mx-auto py-16 md:py-24">
       <ScrollReveal>
         <div className="text-center">
           <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">

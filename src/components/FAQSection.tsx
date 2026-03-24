@@ -43,7 +43,7 @@ const FAQSection = () => {
 
   return (
     <section id="faq" className="bg-background">
-      <div className="container mx-auto px-6 py-20 md:py-28">
+      <div className="container mx-auto py-20 md:py-28">
         <ScrollReveal>
           <div className="text-center max-w-2xl mx-auto">
             <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">

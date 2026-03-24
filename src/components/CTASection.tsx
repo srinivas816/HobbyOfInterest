@@ -1,9 +1,10 @@
 import { ArrowRight } from "lucide-react";
+import { Link } from "react-router-dom";
 import ScrollReveal from "./ScrollReveal";
 
 const CTASection = () => (
   <section id="cta" className="bg-background">
-    <div className="container mx-auto px-4 sm:px-6 py-12 md:py-20">
+    <div className="container mx-auto py-12 md:py-20">
       <ScrollReveal scale>
         <div className="rounded-2xl sm:rounded-3xl bg-dark p-8 sm:p-12 md:p-20 text-center relative overflow-hidden">
           <div className="absolute top-0 right-0 w-60 sm:w-80 h-60 sm:h-80 bg-accent/15 rounded-full blur-[100px] -translate-y-1/3 translate-x-1/3" />
@@ -18,9 +19,18 @@ const CTASection = () => (
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mt-8 sm:mt-10">
-              <button className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground font-body text-sm px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:brightness-110 hover:gap-3 transition-all duration-300 font-medium shadow-lg shadow-accent/25">
+              <Link
+                to="/login?mode=register&next=/learn"
+                className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground font-body text-sm px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:brightness-110 hover:gap-3 transition-all duration-300 font-medium shadow-lg shadow-accent/25"
+              >
                 Get Started Free <ArrowRight size={16} />
-              </button>
+              </Link>
+              <Link
+                to="/login?mode=register&role=instructor&next=/instructor/studio"
+                className="inline-flex items-center justify-center gap-2 border border-dark-border font-body text-sm text-dark-foreground px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:bg-dark-foreground/10 transition-all duration-300"
+              >
+                Become a Tutor
+              </Link>
               <a href="#pricing" className="inline-flex items-center justify-center gap-2 border border-dark-border font-body text-sm text-dark-foreground px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:bg-dark-foreground/10 transition-all duration-300">
                 View Pricing
               </a>

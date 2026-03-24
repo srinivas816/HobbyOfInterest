@@ -6,7 +6,7 @@ const partners = [
 
 const TrustedBySection = () => (
   <section className="bg-background border-b border-border/30">
-    <div className="container mx-auto px-6 py-10 md:py-14">
+    <div className="container mx-auto py-10 md:py-14">
       <p className="font-body text-xs tracking-[0.25em] uppercase text-muted-foreground text-center mb-8">
         Trusted by studios, creators, and workshop communities worldwide
       </p>

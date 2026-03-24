@@ -11,7 +11,8 @@ const features = [
   {
     icon: Target,
     title: "Smart discovery",
-    description: "Find classes by hobby, budget, schedule, and difficulty level. Our algorithm learns what you like.",
+    description:
+      "Filter the catalog by hobby, budget, format, and city. Complete your learning profile for tailored picks in My learning.",
   },
   {
     icon: Zap,
@@ -21,17 +22,17 @@ const features = [
   {
     icon: Users,
     title: "Community cohorts",
-    description: "Learn with peers in small batch groups. Get feedback, share progress, and stay accountable.",
+    description: "Roadmap: cohorts and class discussions. Today, learn at your pace with reviews and progress on each class.",
   },
   {
     icon: BookOpen,
     title: "Creator tools",
-    description: "Instructors get listing management, student analytics, waitlists, and marketing tools built in.",
+    description: "Instructors use Studio to publish classes, upload media, and see enrollment & completion snapshots per class.",
   },
   {
     icon: Shield,
-    title: "Verified instructors",
-    description: "Every instructor is vetted for expertise and teaching quality. Read reviews before you book.",
+    title: "Trusted listings",
+    description: "Read ratings and reviews on each class. Full instructor verification is on our roadmap for production.",
   },
   {
     icon: Lightbulb,
@@ -40,14 +41,14 @@ const features = [
   },
   {
     icon: Award,
-    title: "Money-back guarantee",
-    description: "Not satisfied after your first session? Get a full refund, no questions asked.",
+    title: "Fair refunds (production)",
+    description: "Demo today: class pages describe support windows. Wire real checkout to enforce your live refund policy.",
   },
 ];
 
 const SkillsSection = () => (
   <section id="features" className="section-dark overflow-hidden">
-    <div className="container mx-auto px-6 py-20 md:py-28">
+    <div className="container mx-auto py-20 md:py-28">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 lg:gap-16 items-start">
         <div>
           <ScrollReveal direction="left">

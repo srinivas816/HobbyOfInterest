@@ -2,8 +2,8 @@ import { Smartphone, ArrowRight } from "lucide-react";
 import ScrollReveal from "./ScrollReveal";
 
 const AppDownloadSection = () => (
-  <section className="section-dark border-t border-dark-border">
-    <div className="container mx-auto px-6 py-20 md:py-28">
+  <section id="app-download" className="section-dark border-t border-dark-border">
+    <div className="container mx-auto py-20 md:py-28">
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-12 items-center">
         <ScrollReveal direction="left">
           <span className="font-body text-xs tracking-[0.25em] uppercase text-accent font-medium">

@@ -40,7 +40,7 @@ const AnimatedNumber = ({ value, suffix, isDecimal }: { value: number; suffix: s
 
 const StatsBar = () => (
   <section className="bg-background border-y border-border/30">
-    <div className="container mx-auto px-6 py-14 md:py-16">
+    <div className="container mx-auto py-14 md:py-16">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-8 md:gap-4">
         {stats.map((stat, i) => (
           <motion.div

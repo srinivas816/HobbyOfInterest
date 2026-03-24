@@ -9,6 +9,10 @@ lerna-debug.log*
 
 node_modules
 dist
+
+# Legacy local SQLite (if upgrading from an older checkout)
+server/prisma/dev.db
+server/prisma/*.db
 dist-ssr
 *.local
 

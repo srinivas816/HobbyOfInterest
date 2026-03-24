@@ -3,24 +3,61 @@ import { BrowserRouter, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
+import { AuthProvider } from "@/context/AuthContext";
+import MarketingLayout from "@/layouts/MarketingLayout";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
+import CoursesPage from "./pages/CoursesPage.tsx";
+import CourseDetailPage from "./pages/CourseDetailPage.tsx";
+import InstructorsListPage from "./pages/InstructorsListPage.tsx";
+import InstructorPage from "./pages/InstructorPage.tsx";
+import LoginPage from "./pages/LoginPage.tsx";
+import LearnPage from "./pages/LearnPage.tsx";
+import ClassroomPage from "./pages/ClassroomPage.tsx";
+import WishlistPage from "./pages/WishlistPage.tsx";
+import LessonPlayerPage from "./pages/LessonPlayerPage.tsx";
+import InstructorStudioPage from "./pages/InstructorStudioPage.tsx";
+import AdminModerationPage from "./pages/AdminModerationPage.tsx";
+import OnboardingPage from "./pages/OnboardingPage.tsx";
+import PrivacyPage from "./pages/PrivacyPage.tsx";
+import TermsPage from "./pages/TermsPage.tsx";
+import CookiesPage from "./pages/CookiesPage.tsx";
+import SettingsPage from "./pages/SettingsPage.tsx";
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<Index />} />
-          {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
-          <Route path="*" element={<NotFound />} />
-        </Routes>
-      </BrowserRouter>
-    </TooltipProvider>
+    <AuthProvider>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <BrowserRouter>
+          <Routes>
+            <Route element={<MarketingLayout />}>
+              <Route path="/" element={<Index />} />
+              <Route path="/courses" element={<CoursesPage />} />
+              <Route path="/courses/:slug" element={<CourseDetailPage />} />
+              <Route path="/learn/:courseSlug/lesson/:lessonId" element={<LessonPlayerPage />} />
+              <Route path="/learn/:courseSlug/classroom" element={<ClassroomPage />} />
+              <Route path="/instructors" element={<InstructorsListPage />} />
+              <Route path="/instructors/:id" element={<InstructorPage />} />
+              <Route path="/learn" element={<LearnPage />} />
+              <Route path="/settings" element={<SettingsPage />} />
+              <Route path="/wishlist" element={<WishlistPage />} />
+              <Route path="/instructor/studio" element={<InstructorStudioPage />} />
+              <Route path="/admin/moderation" element={<AdminModerationPage />} />
+              <Route path="/login" element={<LoginPage />} />
+              <Route path="/onboarding" element={<OnboardingPage />} />
+              <Route path="/privacy" element={<PrivacyPage />} />
+              <Route path="/terms" element={<TermsPage />} />
+              <Route path="/cookies" element={<CookiesPage />} />
+              <Route path="*" element={<NotFound />} />
+            </Route>
+          </Routes>
+        </BrowserRouter>
+      </TooltipProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 

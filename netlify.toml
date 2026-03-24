@@ -1,0 +1,11 @@
+# Optional: deploy the frontend from repo root on Netlify.
+# Build settings can also be set in the Netlify UI instead of this file.
+
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200

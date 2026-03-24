@@ -1,0 +1,20 @@
+# Local Postgres for development. From server/: docker compose up -d
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: skillshare
+      POSTGRES_PASSWORD: skillshare
+      POSTGRES_DB: skillshare_hub
+    ports:
+      - "5432:5432"
+    volumes:
+      - skillshare_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U skillshare -d skillshare_hub"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  skillshare_pgdata:
