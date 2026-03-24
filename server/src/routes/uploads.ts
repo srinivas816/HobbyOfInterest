@@ -1,8 +1,11 @@
-import { Router } from "express";
+import { Router, type Request, type Response, type NextFunction } from "express";
 import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
+import type { Writable } from "node:stream";
 import { prisma } from "../lib/prisma.js";
 import { authRequired, type AuthedRequest } from "../middleware/auth.js";
+
+type AuthedMulterRequest = AuthedRequest & { file?: Express.Multer.File };
 
 const router = Router();
 const upload = multer({
@@ -31,15 +34,15 @@ async function assertInstructor(req: AuthedRequest): Promise<boolean> {
   return me?.role === "INSTRUCTOR";
 }
 
-router.post("/", authRequired, (req, res, next) => {
-  upload.single("file")(req, res, (err) => {
+router.post("/", authRequired, (req: Request, res: Response, next: NextFunction) => {
+  upload.single("file")(req, res, (err: unknown) => {
     if (err) {
       res.status(400).json({ error: err instanceof Error ? err.message : "Invalid upload" });
       return;
     }
     next();
   });
-}, async (req: AuthedRequest, res) => {
+}, async (req: AuthedMulterRequest, res: Response) => {
   if (!(await assertInstructor(req))) {
     res.status(403).json({ error: "Instructor access only" });
     return;
@@ -78,7 +81,7 @@ router.post("/", authRequired, (req, res, next) => {
           if (err || !uploaded) reject(err ?? new Error("Upload failed"));
           else resolve(uploaded);
         },
-      );
+      ) as Writable;
       stream.end(file.buffer);
     });
     res.json({ url: result.secure_url, resourceType: result.resource_type ?? resource_type });
