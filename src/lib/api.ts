@@ -18,13 +18,9 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
   }
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const req = { ...init, headers };
-  try {
-    return await fetch(`${base}${path}`, req);
-  } catch (error) {
-    if (!base) throw error;
-    // Fallback to same-origin API path if explicit API base is unreachable.
-    return fetch(path, req);
-  }
+  const trimmedBase = base.replace(/\/+$/, "");
+  const url = trimmedBase ? `${trimmedBase}${path.startsWith("/") ? path : `/${path}`}` : path;
+  return fetch(url, req);
 }
 
 export async function parseJson<T>(res: Response): Promise<T> {
