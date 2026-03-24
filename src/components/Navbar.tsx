@@ -65,9 +65,19 @@ const Navbar = () => {
         <div className="min-w-0 flex-1 pr-1 lg:flex-initial lg:max-w-none">
           <Link
             to="/"
-            className="font-heading block truncate text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-foreground"
+            className="font-heading flex min-w-0 items-center gap-2.5 truncate text-lg sm:text-xl md:text-2xl font-bold tracking-tight text-foreground"
           >
-            Hobby of Interest<span className="text-accent">.</span>
+            <img
+              src="/favicon.svg"
+              alt=""
+              width={36}
+              height={36}
+              className="h-8 w-8 shrink-0 rounded-lg sm:h-9 sm:w-9"
+              decoding="async"
+            />
+            <span className="truncate">
+              Hobby of Interest<span className="text-accent">.</span>
+            </span>
           </Link>
         </div>
 

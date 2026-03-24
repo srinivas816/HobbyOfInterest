@@ -9,8 +9,18 @@ const Footer = () => (
       <ScrollReveal>
         <div className="grid grid-cols-2 md:grid-cols-5 gap-8 md:gap-10">
           <div className="col-span-2 md:col-span-1">
-            <span className="font-heading text-xl font-bold text-dark-foreground">
-              Hobby of Interest<span className="text-accent">.</span>
+            <span className="font-heading flex items-center gap-2.5 text-xl font-bold text-dark-foreground">
+              <img
+                src="/favicon.svg"
+                alt=""
+                width={32}
+                height={32}
+                className="h-8 w-8 shrink-0 rounded-lg"
+                decoding="async"
+              />
+              <span>
+                Hobby of Interest<span className="text-accent">.</span>
+              </span>
             </span>
             <p className="font-body text-xs sm:text-sm text-dark-muted mt-4 leading-relaxed max-w-xs">
               The hobby marketplace for learners and creators. Discover, book, and master creative skills — online or in-person.
