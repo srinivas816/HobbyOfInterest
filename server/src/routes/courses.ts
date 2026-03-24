@@ -8,6 +8,11 @@ import { z } from "zod";
 
 const router = Router();
 
+function finiteNumber(value: unknown, fallback: number): number {
+  const n = typeof value === "string" || typeof value === "number" ? Number(value) : NaN;
+  return Number.isFinite(n) ? n : fallback;
+}
+
 function courseJson(c: {
   id: string;
   slug: string;
@@ -25,8 +30,10 @@ function courseJson(c: {
   rating: number;
   studentCount: number;
   badge: string | null;
-  instructor: { name: string; id: string };
+  /** Required in schema, but guarded for bad/legacy rows or failed includes */
+  instructor: { name: string; id: string } | null;
 }) {
+  const instructor = c.instructor ?? { id: "", name: "Unknown instructor" };
   return {
     id: c.id,
     slug: c.slug,
@@ -45,103 +52,114 @@ function courseJson(c: {
     rating: c.rating,
     studentCount: c.studentCount,
     badge: c.badge,
-    instructor: { id: c.instructor.id, name: c.instructor.name },
+    instructor: { id: instructor.id, name: instructor.name },
   };
 }
 
 router.get("/", async (req, res) => {
-  const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
-  const category = typeof req.query.category === "string" ? req.query.category : "";
-  const onlineOnly = req.query.onlineOnly === "1" || req.query.onlineOnly === "true";
-  const city = typeof req.query.city === "string" ? req.query.city : "";
-  const format = typeof req.query.format === "string" ? req.query.format : "";
-  const minPrice = Number(req.query.minPrice ?? 0);
-  const maxPrice = Number(req.query.maxPrice ?? Number.MAX_SAFE_INTEGER);
-  const minRating = Number(req.query.minRating ?? 0);
-  const page = Math.max(1, Number(req.query.page ?? 1));
-  const pageSize = Math.min(24, Math.max(1, Number(req.query.pageSize ?? 12)));
-  const sort = typeof req.query.sort === "string" ? req.query.sort : "popular";
+  try {
+    const search = typeof req.query.search === "string" ? req.query.search.trim() : "";
+    const category = typeof req.query.category === "string" ? req.query.category : "";
+    const onlineOnly = req.query.onlineOnly === "1" || req.query.onlineOnly === "true";
+    const city = typeof req.query.city === "string" ? req.query.city : "";
+    const format = typeof req.query.format === "string" ? req.query.format : "";
+    const minPrice = finiteNumber(req.query.minPrice, 0);
+    const maxPrice = finiteNumber(req.query.maxPrice, Number.MAX_SAFE_INTEGER);
+    const minRating = Math.max(0, finiteNumber(req.query.minRating, 0));
+    const page = Math.max(1, Math.floor(finiteNumber(req.query.page, 1)));
+    const pageSize = Math.min(24, Math.max(1, Math.floor(finiteNumber(req.query.pageSize, 12))));
+    const sort = typeof req.query.sort === "string" ? req.query.sort : "popular";
 
-  const where: Prisma.CourseWhereInput = { published: true };
+    const where: Prisma.CourseWhereInput = { published: true };
 
-  if (onlineOnly) {
-    where.format = "ONLINE";
-  } else if (category && category !== "All" && category !== "Online Only") {
-    where.category = category;
+    if (onlineOnly) {
+      where.format = "ONLINE";
+    } else if (category && category !== "All" && category !== "Online Only") {
+      where.category = category;
+    }
+    if (city && city !== "All") {
+      where.city = city;
+    }
+    if (format === "ONLINE" || format === "IN_PERSON") {
+      where.format = format;
+    }
+    where.priceCents = { gte: minPrice, lte: maxPrice };
+    if (minRating > 0) {
+      where.rating = { gte: minRating };
+    }
+
+    const orderBy =
+      sort === "price-asc"
+        ? [{ priceCents: "asc" as const }]
+        : sort === "price-desc"
+          ? [{ priceCents: "desc" as const }]
+          : sort === "rating"
+            ? [{ rating: "desc" as const }, { studentCount: "desc" as const }]
+            : [{ studentCount: "desc" as const }];
+
+    let courses = await prisma.course.findMany({
+      where,
+      orderBy,
+      select: {
+        id: true,
+        slug: true,
+        title: true,
+        description: true,
+        category: true,
+        format: true,
+        locationLabel: true,
+        city: true,
+        durationLabel: true,
+        priceCents: true,
+        outcomes: true,
+        imageKey: true,
+        coverImageUrl: true,
+        rating: true,
+        studentCount: true,
+        badge: true,
+        plannerTag: true,
+        instructor: { select: { id: true, name: true } },
+      },
+    });
+
+    if (search) {
+      const q = search.toLowerCase();
+      courses = courses.filter((c) => {
+        const title = (c.title ?? "").toLowerCase();
+        const description = (c.description ?? "").toLowerCase();
+        const category = (c.category ?? "").toLowerCase();
+        const instructorName = (c.instructor?.name ?? "").toLowerCase();
+        const plannerTag = (c.plannerTag ?? "").toLowerCase();
+        return (
+          title.includes(q) ||
+          description.includes(q) ||
+          category.includes(q) ||
+          instructorName.includes(q) ||
+          plannerTag.includes(q)
+        );
+      });
+    }
+
+    if (category === "Online Only") {
+      courses = courses.filter((c) => c.format === "ONLINE");
+    }
+
+    const total = courses.length;
+    const start = (page - 1) * pageSize;
+    const pageRows = courses.slice(start, start + pageSize);
+    res.json({
+      courses: pageRows.map((row) => courseJson(row)),
+      pagination: {
+        page,
+        pageSize,
+        total,
+        totalPages: Math.max(1, Math.ceil(total / pageSize)),
+      },
+    });
+  } catch (err) {
+    console.error("GET /api/courses failed:", err);
+    res.status(500).json({ error: "Failed to load courses" });
   }
-  if (city && city !== "All") {
-    where.city = city;
-  }
-  if (format === "ONLINE" || format === "IN_PERSON") {
-    where.format = format;
-  }
-  where.priceCents = { gte: Number.isFinite(minPrice) ? minPrice : 0, lte: Number.isFinite(maxPrice) ? maxPrice : Number.MAX_SAFE_INTEGER };
-  if (minRating > 0) {
-    where.rating = { gte: minRating };
-  }
-
-  const orderBy =
-    sort === "price-asc"
-      ? [{ priceCents: "asc" as const }]
-      : sort === "price-desc"
-        ? [{ priceCents: "desc" as const }]
-        : sort === "rating"
-          ? [{ rating: "desc" as const }, { studentCount: "desc" as const }]
-          : [{ studentCount: "desc" as const }];
-
-  let courses = await prisma.course.findMany({
-    where,
-    orderBy,
-    select: {
-      id: true,
-      slug: true,
-      title: true,
-      description: true,
-      category: true,
-      format: true,
-      locationLabel: true,
-      city: true,
-      durationLabel: true,
-      priceCents: true,
-      outcomes: true,
-      imageKey: true,
-      coverImageUrl: true,
-      rating: true,
-      studentCount: true,
-      badge: true,
-      plannerTag: true,
-      instructor: { select: { id: true, name: true } },
-    },
-  });
-
-  if (search) {
-    const q = search.toLowerCase();
-    courses = courses.filter(
-      (c) =>
-        c.title.toLowerCase().includes(q) ||
-        c.description.toLowerCase().includes(q) ||
-        c.category.toLowerCase().includes(q) ||
-        c.instructor.name.toLowerCase().includes(q) ||
-        (c.plannerTag && c.plannerTag.toLowerCase().includes(q)),
-    );
-  }
-
-  if (category === "Online Only") {
-    courses = courses.filter((c) => c.format === "ONLINE");
-  }
-
-  const total = courses.length;
-  const start = (page - 1) * pageSize;
-  const pageRows = courses.slice(start, start + pageSize);
-  res.json({
-    courses: pageRows.map(courseJson),
-    pagination: {
-      page,
-      pageSize,
-      total,
-      totalPages: Math.max(1, Math.ceil(total / pageSize)),
-    },
-  });
 });
 
 router.get("/:slug", optionalAuth, async (req: AuthedRequest, res) => {

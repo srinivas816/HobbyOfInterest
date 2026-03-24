@@ -1,6 +1,5 @@
 import "dotenv/config";
 import express from "express";
-import cors from "cors";
 import authRoutes from "./routes/auth.js";
 import coursesRoutes from "./routes/courses.js";
 import recommendationsRoutes from "./routes/recommendations.js";
@@ -23,32 +22,26 @@ if (process.env.NODE_ENV === "production") {
 }
 const PORT = Number(process.env.PORT) || 3001;
 
+function normalizeOrigin(o: string): string {
+  return o
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .trim()
+    .replace(/^["']+|["']+$/g, "")
+    .replace(/\/+$/, "");
+}
+
 function parseCorsOrigins(): string[] {
   const raw = process.env.CORS_ORIGIN?.trim();
   const fallback = "http://localhost:8080,http://127.0.0.1:8080";
   const source = raw && raw.length > 0 ? raw : fallback;
   return source
     .split(",")
-    .map((s) =>
-      s
-        .trim()
-        .replace(/^["']+|["']+$/g, "")
-        .replace(/\/+$/, ""),
-    )
+    .map((s) => normalizeOrigin(s))
     .filter(Boolean);
 }
 
 const corsOrigins = parseCorsOrigins();
-
-// Bearer JWT is sent in Authorization — not cookies — so credentials:false is fine and avoids stricter CORS behavior.
-app.use(
-  cors({
-    origin: corsOrigins,
-    credentials: false,
-    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization"],
-  }),
-);
+const corsOriginSet = new Set(corsOrigins);
 
 console.log(`CORS allow list (${corsOrigins.length}): ${corsOrigins.join(" | ")}`);
 const onlyLoopback =
@@ -59,6 +52,32 @@ if (process.env.NODE_ENV === "production" && onlyLoopback) {
     "WARNING: CORS_ORIGIN is missing or only lists localhost — Netlify/Vercel will be blocked. On Render, set CORS_ORIGIN=https://YOUR-SITE.netlify.app (comma-separate multiple origins).",
   );
 }
+
+// Manual CORS: echo the browser's requested headers on preflight (libraries may send more than Content-Type/Authorization).
+app.use((req, res, next) => {
+  const origin = typeof req.headers.origin === "string" ? req.headers.origin : undefined;
+  const allowed = origin ? corsOriginSet.has(normalizeOrigin(origin)) : false;
+
+  if (allowed && origin) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,PUT,PATCH,DELETE,OPTIONS");
+    const reqHdrs = req.headers["access-control-request-headers"];
+    res.setHeader(
+      "Access-Control-Allow-Headers",
+      typeof reqHdrs === "string" && reqHdrs.length > 0
+        ? reqHdrs
+        : "Content-Type, Authorization, Accept",
+    );
+    res.setHeader("Access-Control-Max-Age", "86400");
+    res.setHeader("Vary", "Origin");
+  }
+
+  if (req.method === "OPTIONS") {
+    res.status(204).end();
+    return;
+  }
+  next();
+});
 app.use(express.json({ limit: "1mb" }));
 
 app.get("/", (_req, res) => {
