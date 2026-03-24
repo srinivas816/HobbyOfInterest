@@ -69,6 +69,8 @@ app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
 
-app.listen(PORT, () => {
-  console.log(`API listening on http://localhost:${PORT}`);
+// Render (and most PaaS) require listening on all interfaces — not only loopback —
+// or the health check / port scan never sees an open port and deploy times out.
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`API listening on 0.0.0.0:${PORT}`);
 });
