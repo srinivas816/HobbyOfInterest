@@ -8,9 +8,19 @@ import { z } from "zod";
 
 const router = Router();
 
+/** Prisma `Int` / Postgres INT4 — must not use Number.MAX_SAFE_INTEGER as a query bound */
+const PG_INT4_MAX = 2_147_483_647;
+
 function finiteNumber(value: unknown, fallback: number): number {
   const n = typeof value === "string" || typeof value === "number" ? Number(value) : NaN;
   return Number.isFinite(n) ? n : fallback;
+}
+
+/** Safe bounds for `priceCents` filters (INT4 column) */
+function priceCentsFilterBound(value: unknown, fallback: number): number {
+  const raw = finiteNumber(value, fallback);
+  const truncated = Math.trunc(raw);
+  return Math.min(PG_INT4_MAX, Math.max(0, truncated));
 }
 
 function courseJson(c: {
@@ -63,8 +73,11 @@ router.get("/", async (req, res) => {
     const onlineOnly = req.query.onlineOnly === "1" || req.query.onlineOnly === "true";
     const city = typeof req.query.city === "string" ? req.query.city : "";
     const format = typeof req.query.format === "string" ? req.query.format : "";
-    const minPrice = finiteNumber(req.query.minPrice, 0);
-    const maxPrice = finiteNumber(req.query.maxPrice, Number.MAX_SAFE_INTEGER);
+    let minPrice = priceCentsFilterBound(req.query.minPrice, 0);
+    let maxPrice = priceCentsFilterBound(req.query.maxPrice, PG_INT4_MAX);
+    if (minPrice > maxPrice) {
+      [minPrice, maxPrice] = [maxPrice, minPrice];
+    }
     const minRating = Math.max(0, finiteNumber(req.query.minRating, 0));
     const page = Math.max(1, Math.floor(finiteNumber(req.query.page, 1)));
     const pageSize = Math.min(24, Math.max(1, Math.floor(finiteNumber(req.query.pageSize, 12))));
