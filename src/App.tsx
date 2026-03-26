@@ -5,6 +5,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { AuthProvider } from "@/context/AuthContext";
 import MarketingLayout from "@/layouts/MarketingLayout";
+import InstructorAppLayout from "@/layouts/InstructorAppLayout";
 import Index from "./pages/Index.tsx";
 import NotFound from "./pages/NotFound.tsx";
 import CoursesPage from "./pages/CoursesPage.tsx";
@@ -26,6 +27,11 @@ import SettingsPage from "./pages/SettingsPage.tsx";
 import JoinClassPage from "./pages/JoinClassPage.tsx";
 import InstructorActivatePage from "./pages/InstructorActivatePage.tsx";
 import InstructorClassReadyPage from "./pages/InstructorClassReadyPage.tsx";
+import InstructorHomePage from "./pages/instructor/InstructorHomePage.tsx";
+import InstructorClassesPage from "./pages/instructor/InstructorClassesPage.tsx";
+import InstructorStudentsPage from "./pages/instructor/InstructorStudentsPage.tsx";
+import InstructorMorePage from "./pages/instructor/InstructorMorePage.tsx";
+import InstructorClassWorkspacePage from "./pages/instructor/InstructorClassWorkspacePage.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: {
