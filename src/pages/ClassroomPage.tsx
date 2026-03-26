@@ -6,12 +6,15 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { apiFetch, parseJson } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 
 const ClassroomPage = () => {
   const { courseSlug } = useParams<{ courseSlug: string }>();
   const { token, ready } = useAuth();
   const queryClient = useQueryClient();
+  const mvp = mvpInstructorFocus();
   const [tab, setTab] = useState<"announcements" | "discussion" | "assignments">("announcements");
+  const [joinWelcome, setJoinWelcome] = useState<{ title: string } | null>(null);
   const [questionBody, setQuestionBody] = useState("");
   const [submitByAssignment, setSubmitByAssignment] = useState<Record<string, string>>({});
   const [answerDraft, setAnswerDraft] = useState<Record<string, string>>({});
@@ -60,9 +63,27 @@ const ClassroomPage = () => {
     },
   });
 
+  useEffect(() => {
+    if (mvp && tab === "assignments") setTab("announcements");
+  }, [mvp, tab]);
+
+  useEffect(() => {
+    if (!courseSlug) return;
+    try {
+      const k = `classroomWelcome:${courseSlug}`;
+      const raw = sessionStorage.getItem(k);
+      if (raw) {
+        sessionStorage.removeItem(k);
+        setJoinWelcome(JSON.parse(raw) as { title: string });
+      }
+    } catch {
+      setJoinWelcome(null);
+    }
+  }, [courseSlug]);
+
   const assignmentsQuery = useQuery({
     queryKey: ["classroom-assignments", courseSlug],
-    enabled: Boolean(token && courseSlug),
+    enabled: Boolean(token && courseSlug && !mvp),
     queryFn: async () => {
       const res = await apiFetch(`${base}/assignments`);
       return parseJson<{
@@ -74,6 +95,21 @@ const ClassroomPage = () => {
           mySubmission: { content: string; updatedAt: string } | null;
         }>;
         isInstructor: boolean;
+      }>(res);
+    },
+  });
+
+  const trackingQuery = useQuery({
+    queryKey: ["enrolled-tracking", courseSlug],
+    enabled: Boolean(token && courseSlug),
+    retry: false,
+    queryFn: async () => {
+      const res = await apiFetch(`/api/me/enrolled/${encodeURIComponent(courseSlug!)}/tracking`);
+      return parseJson<{
+        attendancePercent: number;
+        sessionsTracked: number;
+        sessionsAttended: number;
+        feeThisMonth: { yearMonth: string; status: string };
       }>(res);
     },
   });
@@ -143,7 +179,7 @@ const ClassroomPage = () => {
   if (!token) return <Navigate to={`/login?next=/learn/${courseSlug}/classroom`} replace />;
 
   const loadErr =
-    announcementsQuery.isError || questionsQuery.isError || assignmentsQuery.isError
+    announcementsQuery.isError || questionsQuery.isError || (!mvp && assignmentsQuery.isError)
       ? "You need to be enrolled in this class (or be its instructor) to open the classroom."
       : null;
 
@@ -153,18 +189,55 @@ const ClassroomPage = () => {
         to="/learn"
         className="inline-flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground font-body"
       >
-        <BookOpen size={16} /> My learning
+        <BookOpen size={16} /> {mvp ? "My classes" : "My learning"}
       </Link>
       <h1 className="font-heading text-3xl mt-6 text-foreground">Class classroom</h1>
       <p className="text-sm text-muted-foreground mt-2 font-body">
-        Announcements, discussion, and assignments for{" "}
+        Announcements, discussion{mvp ? "" : ", and assignments"} for{" "}
         <Link to={`/courses/${courseSlug}`} className="text-accent underline">
           this class
         </Link>
         .
       </p>
 
-      {loadErr && (announcementsQuery.isFetched || questionsQuery.isFetched) ? (
+      {joinWelcome ? (
+        <div className="mt-6 rounded-2xl border-2 border-accent/45 bg-gradient-to-br from-accent/12 to-card/60 p-5 md:p-6 space-y-3">
+          <p className="font-heading text-lg md:text-xl text-foreground">
+            You joined <span className="text-accent">{joinWelcome.title}</span> 🎉
+          </p>
+          <p className="text-sm text-muted-foreground font-body">Next:</p>
+          <ul className="text-sm font-body text-foreground space-y-2 list-disc pl-5">
+            <li>
+              <Link to={`/learn/${courseSlug}`} className="text-accent font-medium hover:underline">
+                View today&apos;s class &amp; lessons
+              </Link>
+            </li>
+            <li>
+              <button type="button" className="text-left text-accent font-medium hover:underline" onClick={() => setTab("announcements")}>
+                Check updates &amp; announcements
+              </button>
+            </li>
+          </ul>
+        </div>
+      ) : null}
+
+      {trackingQuery.isSuccess && trackingQuery.data.sessionsTracked > 0 ? (
+        <div className="mt-6 rounded-xl border border-border/50 bg-card/40 px-4 py-3 text-sm font-body text-muted-foreground">
+          <span className="text-foreground font-medium">{trackingQuery.data.attendancePercent}%</span> attendance across{" "}
+          {trackingQuery.data.sessionsTracked} session
+          {trackingQuery.data.sessionsTracked === 1 ? "" : "s"} · Fee {trackingQuery.data.feeThisMonth.yearMonth}:{" "}
+          <span className="text-foreground">
+            {trackingQuery.data.feeThisMonth.status === "PAID" ? "Paid" : "Pending"}
+          </span>
+        </div>
+      ) : trackingQuery.isSuccess && trackingQuery.data.sessionsTracked === 0 ? (
+        <div className="mt-6 rounded-xl border border-dashed border-border/50 px-4 py-3 text-xs text-muted-foreground font-body">
+          When your tutor records sessions, your attendance summary will appear here.
+        </div>
+      ) : null}
+
+      {loadErr &&
+      (announcementsQuery.isFetched || questionsQuery.isFetched || (!mvp && assignmentsQuery.isFetched)) ? (
         <div className="mt-10 rounded-2xl border border-border/60 bg-card/50 p-8 text-center">
           <p className="text-sm text-muted-foreground font-body">{loadErr}</p>
           <Button className="mt-6 rounded-full" asChild>
@@ -178,7 +251,7 @@ const ClassroomPage = () => {
               [
                 ["announcements", "Announcements", Megaphone],
                 ["discussion", "Discussion", MessageCircle],
-                ["assignments", "Assignments", PenLine],
+                ...(!mvp ? ([["assignments", "Assignments", PenLine]] as const) : []),
               ] as const
             ).map(([id, label, Icon]) => (
               <button
@@ -283,7 +356,7 @@ const ClassroomPage = () => {
               </div>
             )}
 
-            {tab === "assignments" && (
+            {!mvp && tab === "assignments" && (
               <div className="space-y-8">
                 {assignmentsQuery.isLoading && <Loader2 className="animate-spin text-accent" />}
                 {assignmentsQuery.data?.assignments.map((a) => (

@@ -5,6 +5,7 @@ import { BookOpen, CheckCircle2, Loader2, Sparkles, GraduationCap } from "lucide
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, parseJson } from "@/lib/api";
 import { courseCoverSrc } from "@/lib/courseImages";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 
 type EnrollmentRow = {
   id: string;
@@ -52,6 +53,7 @@ const LearnPage = () => {
   const { token, ready, user } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const mvp = mvpInstructorFocus();
 
   useEffect(() => {
     if (ready && !token) navigate(`/login?next=/learn`, { replace: true });
@@ -70,7 +72,7 @@ const LearnPage = () => {
 
   const forYouQuery = useQuery({
     queryKey: ["for-you"],
-    enabled: Boolean(token && user?.role === "LEARNER"),
+    enabled: Boolean(token && user?.role === "LEARNER" && !mvp),
     queryFn: async () => {
       const res = await apiFetch("/api/me/for-you");
       return parseJson<{ courses: ForYouCourse[]; meta: { personalized: boolean } }>(res);
@@ -116,9 +118,11 @@ const LearnPage = () => {
             <BookOpen className="text-accent" size={22} />
           </div>
           <div>
-            <h1 className="font-heading text-3xl md:text-4xl font-light text-foreground">My learning</h1>
+            <h1 className="font-heading text-3xl md:text-4xl font-light text-foreground">{mvp ? "My classes" : "My learning"}</h1>
             <p className="font-body text-sm text-muted-foreground mt-1">
-              Classes you’re enrolled in — open a class to browse the curriculum or continue the next lesson in the player.
+              {mvp
+                ? "Classes you joined via your tutor’s invite — open Classroom for updates, Q&A, and announcements."
+                : "Classes you’re enrolled in — open a class to browse the curriculum or continue the next lesson in the player."}
             </p>
           </div>
         </div>
@@ -201,11 +205,16 @@ const LearnPage = () => {
         {data && data.enrollments.length === 0 && (
           <div className="mt-14 rounded-2xl border border-border/60 bg-card/50 p-10 text-center max-w-lg">
             <p className="font-body text-muted-foreground">You haven’t enrolled in any class yet.</p>
+            {mvp ? (
+              <p className="font-body text-sm text-muted-foreground mt-4 max-w-md mx-auto leading-relaxed">
+                Ask your tutor for their invite link (or WhatsApp message). Open it on this phone to join — no catalog browsing needed.
+              </p>
+            ) : null}
             <Link
-              to="/courses"
+              to={mvp ? "/" : "/courses"}
               className="inline-flex mt-6 font-body text-sm bg-foreground text-background px-6 py-3 rounded-full hover:opacity-90 transition-opacity"
             >
-              Browse catalog
+              {mvp ? "Back home" : "Browse catalog"}
             </Link>
           </div>
         )}
@@ -233,31 +242,33 @@ const LearnPage = () => {
                     <div className="flex flex-col gap-2 justify-stretch sm:justify-center shrink-0 w-full sm:w-auto sm:min-w-[10rem]">
                       <Link
                         to={`/learn/${e.course.slug}/classroom`}
-                        className="inline-flex items-center justify-center rounded-full border border-border/70 bg-background px-4 py-2.5 text-xs font-medium hover:bg-muted/40 transition-colors text-center"
+                        className="inline-flex items-center justify-center rounded-full bg-foreground text-background px-4 py-2.5 text-xs font-medium hover:opacity-90 transition-opacity text-center"
                       >
-                        Classroom
+                        {mvp ? "Open classroom" : "Classroom"}
                       </Link>
-                      {e.course.nextLesson ? (
+                      {!mvp && e.course.nextLesson ? (
                         <Link
                           to={`/learn/${e.course.slug}/lesson/${e.course.nextLesson.id}`}
-                          className="inline-flex items-center justify-center rounded-full bg-foreground text-background px-4 py-2.5 text-xs font-medium hover:opacity-90 transition-opacity text-center whitespace-normal sm:whitespace-nowrap break-words"
+                          className="inline-flex items-center justify-center rounded-full border border-border/70 bg-background px-4 py-2.5 text-xs font-medium hover:bg-muted/40 transition-colors text-center whitespace-normal sm:whitespace-nowrap break-words"
                         >
                           Continue: {e.course.nextLesson.title}
                         </Link>
-                      ) : e.course.totalLessons > 0 ? (
+                      ) : !mvp && e.course.totalLessons > 0 ? (
                         <span className="text-xs font-body text-accent whitespace-nowrap text-center">All lessons done</span>
                       ) : null}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => setOpenCourseSlug((prev) => (prev === e.course.slug ? null : e.course.slug))}
-                    className="mt-3 text-xs font-body text-muted-foreground hover:text-foreground"
-                  >
-                    {openCourseSlug === e.course.slug ? "Hide lesson tracker" : "Open lesson tracker"}
-                  </button>
+                  {!mvp ? (
+                    <button
+                      type="button"
+                      onClick={() => setOpenCourseSlug((prev) => (prev === e.course.slug ? null : e.course.slug))}
+                      className="mt-3 text-xs font-body text-muted-foreground hover:text-foreground"
+                    >
+                      {openCourseSlug === e.course.slug ? "Hide lesson tracker" : "Open lesson tracker"}
+                    </button>
+                  ) : null}
 
-                  {openCourseSlug === e.course.slug && (
+                  {!mvp && openCourseSlug === e.course.slug && (
                     <div className="mt-4 rounded-xl border border-border/60 p-4">
                       {progressQuery.isLoading && <p className="text-xs text-muted-foreground">Loading progress...</p>}
                       {progressQuery.data && (

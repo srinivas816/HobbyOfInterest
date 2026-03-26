@@ -2,6 +2,8 @@
 
 **New to deployment?** Start with **[DEPLOY-BEGINNER.md](./DEPLOY-BEGINNER.md)** — concepts, vocabulary, and a template to document your own setup — then come back here for the exact steps.
 
+**Architecture, env vars, and production incident notes** (CORS, Render, Prisma INT4, etc.): **[APPLICATION-AND-DEPLOY-REFERENCE.md](./APPLICATION-AND-DEPLOY-REFERENCE.md)**.
+
 ---
 
 Your repo is a **monorepo**:

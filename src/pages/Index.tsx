@@ -1,5 +1,6 @@
 import PostAuthBanner from "@/components/PostAuthBanner";
 import HeroSection from "@/components/HeroSection";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 import TrustedBySection from "@/components/TrustedBySection";
 import StatsBar from "@/components/StatsBar";
 import HowItWorksSection from "@/components/HowItWorksSection";
@@ -14,8 +15,13 @@ import FAQSection from "@/components/FAQSection";
 import AppDownloadSection from "@/components/AppDownloadSection";
 import NewsletterSection from "@/components/NewsletterSection";
 import CTASection from "@/components/CTASection";
+import DiscoverHomePage from "@/pages/DiscoverHomePage";
 
 const Index = () => {
+  const mvp = mvpInstructorFocus();
+  if (mvp) {
+    return <DiscoverHomePage />;
+  }
   return (
     <>
       <PostAuthBanner />

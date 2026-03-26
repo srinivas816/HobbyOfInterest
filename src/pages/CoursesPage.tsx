@@ -24,6 +24,36 @@ const CoursesPage = () => {
     setSearch(params.get("q") ?? "");
   }, [params]);
 
+  useEffect(() => {
+    const cat = params.get("category");
+    if (cat) {
+      const decoded = decodeURIComponent(cat.replace(/\+/g, " "));
+      if (categories.includes(decoded)) {
+        setActive(decoded);
+        setPage(1);
+      }
+    }
+  }, [params]);
+
+  useEffect(() => {
+    const c = params.get("city");
+    if (c) {
+      const decoded = decodeURIComponent(c.replace(/\+/g, " "));
+      if (cities.includes(decoded)) {
+        setCity(decoded);
+        setPage(1);
+      }
+    }
+  }, [params]);
+
+  useEffect(() => {
+    const s = params.get("sort");
+    if (s === "popular" || s === "price-asc" || s === "price-desc" || s === "rating") {
+      setSort(s);
+      setPage(1);
+    }
+  }, [params]);
+
   const queryCategory = active === "Online Only" ? "All" : active;
   const queryFormat = active === "Online Only" ? "ONLINE" : format;
   const { data, isLoading, isError, refetch } = useCoursesQuery({

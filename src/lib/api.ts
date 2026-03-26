@@ -24,7 +24,16 @@ export async function apiFetch(path: string, init: RequestInit = {}): Promise<Re
 }
 
 export async function parseJson<T>(res: Response): Promise<T> {
-  const data = (await res.json()) as T & { error?: string | Record<string, unknown> };
+  const text = await res.text();
+  let data = {} as T & { error?: string | Record<string, unknown> };
+  if (text) {
+    try {
+      data = JSON.parse(text) as T & { error?: string | Record<string, unknown> };
+    } catch {
+      if (!res.ok) throw new Error(res.statusText || "Request failed");
+      throw new Error("Invalid JSON from server");
+    }
+  }
   if (!res.ok) {
     const err = data.error;
     const msg =

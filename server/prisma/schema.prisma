@@ -30,10 +30,17 @@ enum PayoutRequestStatus {
   REJECTED
 }
 
+enum FeePaymentStatus {
+  PENDING
+  PAID
+}
+
 model User {
   id                  String        @id @default(cuid())
   email               String        @unique
   passwordHash        String
+  /// E.164 style, e.g. +9198xxxxxxxxx — optional; used for phone OTP login
+  phone               String?       @unique
   name                String
   role                Role          @default(LEARNER)
   planTier            PlanTier      @default(EXPLORER)
@@ -78,6 +85,8 @@ model Course {
   badge          String?
   plannerTag     String?
   published      Boolean        @default(true)
+  /// Short code for invite links (lazy-generated if null)
+  inviteCode     String?        @unique
   instructorId   String
   instructor     User           @relation("InstructorCourses", fields: [instructorId], references: [id], onDelete: Cascade)
   enrollments    Enrollment[]
@@ -87,19 +96,74 @@ model Course {
   announcements  CourseAnnouncement[]
   questions      CourseQuestion[]
   assignments    CourseAssignment[]
+  classSessions  ClassSession[]
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
 }
 
 model Enrollment {
-  id         String   @id @default(cuid())
-  userId     String
-  courseId   String
-  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  course     Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
-  createdAt  DateTime @default(now())
+  id                  String                 @id @default(cuid())
+  userId              String
+  courseId            String
+  user                User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course              Course                 @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  createdAt           DateTime               @default(now())
+  attendanceRecords   AttendanceRecord[]
+  feePeriods          EnrollmentFeePeriod[]
 
   @@unique([userId, courseId])
+}
+
+model ClassSession {
+  id         String               @id @default(cuid())
+  courseId   String
+  course     Course               @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  heldAt     DateTime
+  label      String?
+  createdAt  DateTime             @default(now())
+  attendance AttendanceRecord[]
+
+  @@index([courseId])
+}
+
+model AttendanceRecord {
+  id           String       @id @default(cuid())
+  sessionId    String
+  enrollmentId String
+  session      ClassSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  enrollment   Enrollment   @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  present      Boolean      @default(false)
+
+  @@unique([sessionId, enrollmentId])
+}
+
+/// Monthly fee tracking per enrollment (manual MVP — no payment gateway)
+model EnrollmentFeePeriod {
+  id             String             @id @default(cuid())
+  enrollmentId   String
+  enrollment     Enrollment         @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  yearMonth      String
+  status         FeePaymentStatus   @default(PENDING)
+  note           String?
+  createdAt      DateTime           @default(now())
+  updatedAt      DateTime           @updatedAt
+
+  @@unique([enrollmentId, yearMonth])
+  @@index([enrollmentId])
+}
+
+model OtpChallenge {
+  id         String   @id @default(cuid())
+  phone      String
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  /// When set, OTP verifies linking this phone to the signed-in user (not passwordless login).
+  linkUserId String?
+  createdAt  DateTime @default(now())
+
+  @@index([phone])
+  @@index([linkUserId])
 }
 
 model Favorite {

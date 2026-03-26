@@ -5,8 +5,66 @@ import { formatInrFromPaise } from "../lib/inr.js";
 import { authRequired, type AuthedRequest } from "../middleware/auth.js";
 import { pathParam } from "../lib/httpParams.js";
 import { broadcastToLearners } from "../lib/smtpBroadcast.js";
+import { assignInviteCodeIfMissing } from "../lib/inviteCode.js";
+import {
+  assertInstructorCanAddLearner,
+  getInstructorSubscriptionSummary,
+} from "../lib/instructorEnrollmentCap.js";
+import { razorpayConfigured } from "../lib/razorpay.js";
+import { trialBypassAllowed } from "../lib/checkoutTrial.js";
+import { funnelLog } from "../lib/funnel.js";
 
 const router = Router();
+
+function ymRegex(ym: string): boolean {
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(ym);
+}
+
+function lastNCalendarMonths(n: number): string[] {
+  const out: string[] = [];
+  const base = new Date();
+  for (let i = 0; i < n; i++) {
+    const d = new Date(base.getFullYear(), base.getMonth() - i, 1);
+    out.push(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+  return out;
+}
+
+type ParsedEnrollLine =
+  | { kind: "email"; value: string }
+  | { kind: "phone"; tries: string[] }
+  | { kind: "invalid"; raw: string };
+
+function parseEnrollmentLine(raw: string): ParsedEnrollLine | null {
+  const line = raw.trim();
+  if (!line) return null;
+  const emailCheck = z.string().email().safeParse(line);
+  if (emailCheck.success) return { kind: "email", value: emailCheck.data.trim().toLowerCase() };
+  const digits = line.replace(/\D/g, "");
+  if (digits.length >= 10) {
+    const last10 = digits.slice(-10);
+    const tries = new Set<string>();
+    tries.add(`+91${last10}`);
+    if (line.replace(/\s/g, "").startsWith("+")) tries.add(line.replace(/\s/g, ""));
+    return { kind: "phone", tries: [...tries] };
+  }
+  return { kind: "invalid", raw: line };
+}
+
+async function findUserForEnrollLine(parsed: ParsedEnrollLine): Promise<{ id: string } | null> {
+  if (parsed.kind === "invalid") return null;
+  if (parsed.kind === "email") {
+    return prisma.user.findFirst({
+      where: { email: { equals: parsed.value, mode: "insensitive" } },
+      select: { id: true },
+    });
+  }
+  for (const phone of parsed.tries) {
+    const u = await prisma.user.findFirst({ where: { phone }, select: { id: true } });
+    if (u) return u;
+  }
+  return null;
+}
 
 const sectionSchema = z.object({
   courseSlug: z.string().min(1),
@@ -53,6 +111,17 @@ const courseCreateSchema = z.object({
   imageKey: z.string().min(2).max(120).optional(),
   coverImageUrl: z.string().url().max(2048).optional(),
   published: z.boolean().optional(),
+});
+
+/** Fast activation: minimal fields; server fills description/outcomes. */
+const courseActivationSchema = z.object({
+  title: z.string().min(3).max(160),
+  category: z.string().min(2).max(120),
+  format: z.enum(["ONLINE", "IN_PERSON"]),
+  city: z.string().max(120).optional().nullable(),
+  durationLabel: z.string().min(2).max(80),
+  /** Monthly or per-term fee in INR (whole rupees); 0 = free */
+  priceInr: z.number().int().min(0).max(999999),
 });
 
 const announcementCreateSchema = z.object({
@@ -188,6 +257,154 @@ router.get("/profile", authRequired, async (req: AuthedRequest, res) => {
   res.json({ profile: me });
 });
 
+router.get("/subscription-summary", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const summary = await getInstructorSubscriptionSummary(req.userId!);
+  if (!summary) {
+    res.status(404).json({ error: "User not found" });
+    return;
+  }
+  const checkoutLive = razorpayConfigured();
+  res.json({
+    ...summary,
+    monthlyPriceInr: 299,
+    monthlyPriceDisplay: "₹299/month",
+    checkoutLive,
+    trialBypassAllowed: trialBypassAllowed(),
+    upgradeNote: checkoutLive
+      ? "Pay with Razorpay in Account → Plan & upgrade. Your Pro tier activates after signature verification on the server."
+      : "Live checkout needs RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET on the API. For pilots without Razorpay, use CHECKOUT_DEV_BYPASS=1 (non-production only) or set plan in the database.",
+  });
+});
+
+/** Today’s sessions + incomplete attendance (for instructor home / retention). */
+router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+
+  const ym = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}`;
+
+  const myCourses = await prisma.course.findMany({
+    where: { instructorId: req.userId! },
+    select: { id: true },
+  });
+  const courseIds = myCourses.map((c) => c.id);
+  if (courseIds.length === 0) {
+    res.json({
+      sessionsToday: 0,
+      pendingAttendanceCount: 0,
+      totalStudentEnrollments: 0,
+      pendingFeesCount: 0,
+      feeMonth: ym,
+      alerts: [] as Array<{ id: string; kind: string; message: string; severity: "info" | "warning" }>,
+      scheduleToday: [] as Array<{
+        sessionId: string;
+        courseSlug: string;
+        courseTitle: string;
+        heldAt: string;
+        label: string | null;
+        studentCount: number;
+      }>,
+    });
+    return;
+  }
+
+  const sessionsToday = await prisma.classSession.findMany({
+    where: {
+      courseId: { in: courseIds },
+      heldAt: { gte: dayStart, lt: dayEnd },
+    },
+    orderBy: { heldAt: "asc" },
+    include: {
+      course: { select: { slug: true, title: true } },
+      attendance: { select: { enrollmentId: true } },
+    },
+  });
+
+  let pendingAttendanceCount = 0;
+  for (const session of sessionsToday) {
+    const enrollCount = await prisma.enrollment.count({ where: { courseId: session.courseId } });
+    const marked = new Set(session.attendance.map((a) => a.enrollmentId));
+    pendingAttendanceCount += Math.max(0, enrollCount - marked.size);
+  }
+
+  const totalStudentEnrollments = await prisma.enrollment.count({
+    where: { course: { instructorId: req.userId! } },
+  });
+
+  const sessionCourseIds = [...new Set(sessionsToday.map((s) => s.courseId))];
+  const enrollCounts =
+    sessionCourseIds.length === 0
+      ? []
+      : await prisma.enrollment.groupBy({
+          by: ["courseId"],
+          where: { courseId: { in: sessionCourseIds } },
+          _count: { _all: true },
+        });
+  const countByCourse = new Map(enrollCounts.map((r) => [r.courseId, r._count._all]));
+
+  const scheduleToday = sessionsToday.map((s) => ({
+    sessionId: s.id,
+    courseSlug: s.course.slug,
+    courseTitle: s.course.title,
+    heldAt: s.heldAt.toISOString(),
+    label: s.label,
+    studentCount: countByCourse.get(s.courseId) ?? 0,
+  }));
+
+  const allEnrollmentsThisMonth = await prisma.enrollment.findMany({
+    where: { course: { instructorId: req.userId! } },
+    select: {
+      id: true,
+      feePeriods: {
+        where: { yearMonth: ym },
+        select: { status: true },
+        take: 1,
+      },
+    },
+  });
+  const pendingFeesCount = allEnrollmentsThisMonth.filter(
+    (e) => (e.feePeriods[0]?.status ?? "PENDING") === "PENDING",
+  ).length;
+
+  const alerts: Array<{ id: string; kind: string; message: string; severity: "info" | "warning" }> = [];
+  if (pendingFeesCount > 0) {
+    alerts.push({
+      id: "fees-pending",
+      kind: "fees",
+      severity: "warning",
+      message: `${pendingFeesCount} student${pendingFeesCount === 1 ? "" : "s"} still have fees pending for ${ym}. Open roster to mark paid or send a WhatsApp reminder.`,
+    });
+  }
+  if (pendingAttendanceCount > 0) {
+    alerts.push({
+      id: "attendance-pending",
+      kind: "attendance",
+      severity: "warning",
+      message: `${pendingAttendanceCount} attendance slot${pendingAttendanceCount === 1 ? "" : "s"} still open for today — tap Present/Absent so your records stay accurate.`,
+    });
+  }
+
+  res.json({
+    sessionsToday: sessionsToday.length,
+    pendingAttendanceCount,
+    totalStudentEnrollments,
+    pendingFeesCount,
+    feeMonth: ym,
+    alerts,
+    scheduleToday,
+  });
+});
+
 router.patch("/profile", authRequired, async (req: AuthedRequest, res) => {
   if (!(await assertInstructor(req))) {
     res.status(403).json({ error: "Instructor access only" });
@@ -304,7 +521,75 @@ router.post("/courses", authRequired, async (req: AuthedRequest, res) => {
     data: { instructorClasses: { increment: 1 } },
   });
 
-  res.status(201).json({ course: created });
+  const inviteCode = await assignInviteCodeIfMissing(prisma, created.id);
+  funnelLog("class_created", req.userId!, { slug: created.slug, path: "full" });
+  res.status(201).json({ course: { ...created, inviteCode } });
+});
+
+router.post("/courses/activation", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const parsed = courseActivationSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  if (parsed.data.format === "IN_PERSON" && !(parsed.data.city?.trim())) {
+    res.status(400).json({ error: "City is required for in-person classes" });
+    return;
+  }
+  const title = parsed.data.title.trim();
+  const whereLine =
+    parsed.data.format === "ONLINE"
+      ? "Online sessions — link and schedule are shared after students join."
+      : `In-person in ${parsed.data.city!.trim()}.`;
+  const description = `${title}. Schedule: ${parsed.data.durationLabel}. ${whereLine} Students use this app for classroom updates, materials, and messages. You can edit the full listing anytime in Studio.`;
+  const outcomes = `Attend scheduled sessions; practice between classes; ask your instructor questions in the classroom.`;
+  const priceRupees = Math.max(parsed.data.priceInr, 0);
+  const priceCents = priceRupees * 100;
+
+  const base = slugify(title);
+  let slug = base || "untitled-class";
+  let n = 1;
+  while (await prisma.course.findUnique({ where: { slug } })) {
+    n += 1;
+    slug = `${base}-${n}`;
+  }
+
+  const created = await prisma.course.create({
+    data: {
+      slug,
+      title,
+      description,
+      category: parsed.data.category.trim(),
+      format: parsed.data.format,
+      locationLabel: parsed.data.format === "ONLINE" ? "Online" : "In-person",
+      city: parsed.data.format === "ONLINE" ? null : parsed.data.city!.trim(),
+      durationLabel: parsed.data.durationLabel.trim(),
+      priceCents,
+      outcomes,
+      imageKey: "hero-pottery",
+      coverImageUrl: null,
+      rating: 4.8,
+      studentCount: 0,
+      badge: "New",
+      plannerTag: null,
+      published: false,
+      instructorId: req.userId!,
+    },
+    select: { id: true, slug: true },
+  });
+
+  await prisma.user.update({
+    where: { id: req.userId! },
+    data: { instructorClasses: { increment: 1 } },
+  });
+
+  const inviteCode = await assignInviteCodeIfMissing(prisma, created.id);
+  funnelLog("class_created", req.userId!, { slug: created.slug, path: "activation" });
+  res.status(201).json({ course: { ...created, inviteCode } });
 });
 
 router.patch("/courses/:slug", authRequired, async (req: AuthedRequest, res) => {
@@ -366,9 +651,14 @@ router.get("/courses/:slug/roster", authRequired, async (req: AuthedRequest, res
     res.status(400).json({ error: "Invalid slug" });
     return;
   }
+  const now = new Date();
+  const defaultYm = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const qYm = typeof req.query.feeMonth === "string" ? req.query.feeMonth : "";
+  const feeMonth = ymRegex(qYm) ? qYm : defaultYm;
+
   const course = await prisma.course.findFirst({
     where: { slug, instructorId: req.userId! },
-    select: { id: true, title: true, slug: true },
+    select: { id: true, title: true, slug: true, priceCents: true },
   });
   if (!course) {
     res.status(404).json({ error: "Course not found for this instructor" });
@@ -377,16 +667,530 @@ router.get("/courses/:slug/roster", authRequired, async (req: AuthedRequest, res
   const rows = await prisma.enrollment.findMany({
     where: { courseId: course.id },
     orderBy: { createdAt: "desc" },
-    include: { user: { select: { id: true, name: true, email: true } } },
+    include: { user: { select: { id: true, name: true, email: true, phone: true } } },
   });
-  res.json({
-    course: { title: course.title, slug: course.slug },
-    students: rows.map((e) => ({
+  const enrollmentIds = rows.map((e) => e.id);
+  const feeRows =
+    enrollmentIds.length === 0
+      ? []
+      : await prisma.enrollmentFeePeriod.findMany({
+          where: { yearMonth: feeMonth, enrollmentId: { in: enrollmentIds } },
+        });
+  const feeMap = new Map(feeRows.map((f) => [f.enrollmentId, f.status]));
+
+  const dayStart = new Date(now);
+  dayStart.setHours(0, 0, 0, 0);
+  const dayEnd = new Date(dayStart);
+  dayEnd.setDate(dayEnd.getDate() + 1);
+  const sessionsTodayCourse = await prisma.classSession.findMany({
+    where: { courseId: course.id, heldAt: { gte: dayStart, lt: dayEnd } },
+    orderBy: { heldAt: "desc" },
+    include: { attendance: { select: { present: true } } },
+  });
+  const latestToday = sessionsTodayCourse[0];
+  const presentTodayCount = latestToday ? latestToday.attendance.filter((a) => a.present).length : 0;
+
+  const sessionsHeld = await prisma.classSession.count({ where: { courseId: course.id } });
+  const presentAgg =
+    enrollmentIds.length === 0
+      ? []
+      : await prisma.attendanceRecord.groupBy({
+          by: ["enrollmentId"],
+          where: { present: true, session: { courseId: course.id } },
+          _count: { _all: true },
+        });
+  const presentByEnr = new Map(presentAgg.map((r) => [r.enrollmentId, r._count._all]));
+
+  const recent3 = lastNCalendarMonths(3);
+  const feeForRecent =
+    enrollmentIds.length === 0
+      ? []
+      : await prisma.enrollmentFeePeriod.findMany({
+          where: { enrollmentId: { in: enrollmentIds }, yearMonth: { in: recent3 } },
+          select: { enrollmentId: true, yearMonth: true, status: true },
+        });
+  /** Paid months in last 3 calendar months (missing row = not paid). */
+  function feePaidRecentCount(enrollmentId: string): number {
+    let n = 0;
+    for (const ym of recent3) {
+      const row = feeForRecent.find((x) => x.enrollmentId === enrollmentId && x.yearMonth === ym);
+      if (row?.status === "PAID") n++;
+    }
+    return n;
+  }
+
+  let pendingFeesCount = 0;
+  const students = rows.map((e) => {
+    const st = feeMap.get(e.id) ?? "PENDING";
+    if (st === "PENDING") pendingFeesCount += 1;
+    return {
       enrollmentId: e.id,
       enrolledAt: e.createdAt.toISOString(),
-      learner: { id: e.user.id, name: e.user.name, email: e.user.email },
+      learner: { id: e.user.id, name: e.user.name, email: e.user.email, phone: e.user.phone },
+      feeStatus: st as "PENDING" | "PAID",
+      stats: {
+        sessionsHeld,
+        sessionsPresent: presentByEnr.get(e.id) ?? 0,
+        feeRecentPaidCount: feePaidRecentCount(e.id),
+        feeRecentMonthCount: recent3.length,
+      },
+    };
+  });
+
+  res.json({
+    course: {
+      title: course.title,
+      slug: course.slug,
+      monthlyFeeDisplay: formatInrFromPaise(course.priceCents),
+      feeMonth,
+    },
+    summary: {
+      totalStudents: rows.length,
+      presentTodayCount,
+      pendingFeesCount,
+      todaysSessionId: latestToday?.id ?? null,
+    },
+    students,
+  });
+});
+
+const bulkEnrollLinesSchema = z.object({
+  /** Raw lines; server splits on newlines inside each string too */
+  lines: z.array(z.string().max(220)).max(80),
+});
+
+router.post("/courses/:slug/roster/bulk-enroll", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const parsed = bulkEnrollLinesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true, instructorId: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+
+  const flatLines = parsed.data.lines
+    .flatMap((l) => l.split(/[\r\n]+/))
+    .map((s) => s.trim())
+    .filter(Boolean);
+  const uniqueLines = [...new Set(flatLines)].slice(0, 60);
+
+  const enrolled: string[] = [];
+  const alreadyEnrolled: string[] = [];
+  const notFound: string[] = [];
+  const invalidFormat: string[] = [];
+  const blocked: { line: string; message: string }[] = [];
+  const skippedDuplicate: string[] = [];
+  const seenUserIds = new Set<string>();
+
+  for (const line of uniqueLines) {
+    const p = parseEnrollmentLine(line);
+    if (!p || p.kind === "invalid") {
+      invalidFormat.push(line);
+      continue;
+    }
+    const user = await findUserForEnrollLine(p);
+    if (!user) {
+      notFound.push(line);
+      continue;
+    }
+    if (user.id === req.userId!) {
+      invalidFormat.push(line);
+      continue;
+    }
+    if (seenUserIds.has(user.id)) {
+      skippedDuplicate.push(line);
+      continue;
+    }
+    seenUserIds.add(user.id);
+
+    const existing = await prisma.enrollment.findUnique({
+      where: { userId_courseId: { userId: user.id, courseId: course.id } },
+    });
+    if (existing) {
+      alreadyEnrolled.push(line);
+      continue;
+    }
+
+    const gate = await assertInstructorCanAddLearner(course.instructorId, user.id);
+    if (!gate.ok) {
+      blocked.push({ line, message: gate.message });
+      continue;
+    }
+
+    try {
+      await prisma.enrollment.create({
+        data: { userId: user.id, courseId: course.id },
+      });
+      await prisma.course.update({
+        where: { id: course.id },
+        data: { studentCount: { increment: 1 } },
+      });
+      enrolled.push(line);
+    } catch {
+      blocked.push({ line, message: "Could not create enrollment (try again)" });
+    }
+  }
+
+  funnelLog("bulk_enroll_attempt", req.userId!, {
+    courseSlug: slug,
+    enrolled: enrolled.length,
+    notFound: notFound.length,
+    blocked: blocked.length,
+  });
+
+  res.json({
+    ok: true,
+    enrolled,
+    alreadyEnrolled,
+    notFound,
+    invalidFormat,
+    blocked,
+    skippedDuplicate,
+  });
+});
+
+const sessionCreateSchema = z.object({
+  heldAt: z.string().min(1),
+  label: z.string().max(120).optional().nullable(),
+});
+
+const attendancePutSchema = z.object({
+  marks: z.array(
+    z.object({
+      enrollmentId: z.string().min(1),
+      present: z.boolean(),
+    }),
+  ),
+});
+
+const feesPutSchema = z.object({
+  rows: z.array(
+    z.object({
+      enrollmentId: z.string().min(1),
+      status: z.enum(["PENDING", "PAID"]),
+    }),
+  ),
+});
+
+router.get("/courses/:slug/invite", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const inviteCode = await assignInviteCodeIfMissing(prisma, course.id);
+  funnelLog("invite_link_opened", req.userId!, { courseSlug: slug });
+  res.json({ inviteCode });
+});
+
+router.post("/courses/:slug/invite/regenerate", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  await prisma.course.update({ where: { id: course.id }, data: { inviteCode: null } });
+  const inviteCode = await assignInviteCodeIfMissing(prisma, course.id);
+  funnelLog("invite_regenerated", req.userId!, { courseSlug: slug });
+  res.json({ inviteCode });
+});
+
+router.get("/courses/:slug/sessions", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const sessions = await prisma.classSession.findMany({
+    where: { courseId: course.id },
+    orderBy: { heldAt: "desc" },
+    include: {
+      attendance: { select: { present: true } },
+    },
+  });
+  res.json({
+    sessions: sessions.map((s) => ({
+      id: s.id,
+      heldAt: s.heldAt.toISOString(),
+      label: s.label,
+      presentCount: s.attendance.filter((a) => a.present).length,
+      totalMarked: s.attendance.length,
     })),
   });
+});
+
+router.post("/courses/:slug/sessions", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  if (!slug) {
+    res.status(400).json({ error: "Invalid slug" });
+    return;
+  }
+  const parsed = sessionCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const heldAt = new Date(parsed.data.heldAt);
+  if (Number.isNaN(heldAt.getTime())) {
+    res.status(400).json({ error: "Invalid date" });
+    return;
+  }
+  const session = await prisma.classSession.create({
+    data: {
+      courseId: course.id,
+      heldAt,
+      label: parsed.data.label?.trim() || null,
+    },
+  });
+  res.status(201).json({
+    session: { id: session.id, heldAt: session.heldAt.toISOString(), label: session.label },
+  });
+});
+
+router.get("/courses/:slug/sessions/:sessionId/attendance", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  const sessionId = pathParam(req.params.sessionId);
+  if (!slug || !sessionId) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+  const session = await prisma.classSession.findFirst({
+    where: { id: sessionId, course: { slug, instructorId: req.userId! } },
+    select: { id: true },
+  });
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  const enrollments = await prisma.enrollment.findMany({
+    where: { course: { slug, instructorId: req.userId! } },
+    orderBy: { createdAt: "asc" },
+    include: { user: { select: { id: true, name: true } } },
+  });
+  const records = await prisma.attendanceRecord.findMany({
+    where: { sessionId },
+  });
+  const byEnr = new Map(records.map((r) => [r.enrollmentId, r.present]));
+  res.json({
+    students: enrollments.map((e) => ({
+      enrollmentId: e.id,
+      name: e.user.name,
+      present: byEnr.get(e.id) ?? false,
+    })),
+  });
+});
+
+router.put("/courses/:slug/sessions/:sessionId/attendance", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  const sessionId = pathParam(req.params.sessionId);
+  if (!slug || !sessionId) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+  const parsed = attendancePutSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const session = await prisma.classSession.findFirst({
+    where: { id: sessionId, course: { slug, instructorId: req.userId! } },
+    select: { id: true },
+  });
+  if (!session) {
+    res.status(404).json({ error: "Session not found" });
+    return;
+  }
+  const validIds = new Set(
+    (
+      await prisma.enrollment.findMany({
+        where: { course: { slug, instructorId: req.userId! } },
+        select: { id: true },
+      })
+    ).map((e) => e.id),
+  );
+  for (const m of parsed.data.marks) {
+    if (!validIds.has(m.enrollmentId)) {
+      res.status(400).json({ error: "Unknown enrollment" });
+      return;
+    }
+  }
+  await prisma.$transaction(
+    parsed.data.marks.map((m) =>
+      prisma.attendanceRecord.upsert({
+        where: {
+          sessionId_enrollmentId: { sessionId, enrollmentId: m.enrollmentId },
+        },
+        create: { sessionId, enrollmentId: m.enrollmentId, present: m.present },
+        update: { present: m.present },
+      }),
+    ),
+  );
+  res.json({ ok: true });
+});
+
+router.get("/courses/:slug/fees/:yearMonth", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  const yearMonth = pathParam(req.params.yearMonth);
+  if (!slug || !yearMonth || !ymRegex(yearMonth)) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const enrollments = await prisma.enrollment.findMany({
+    where: { courseId: course.id },
+    orderBy: { createdAt: "asc" },
+    include: { user: { select: { name: true } } },
+  });
+  const fees = await prisma.enrollmentFeePeriod.findMany({
+    where: { yearMonth, enrollmentId: { in: enrollments.map((e) => e.id) } },
+  });
+  const feeMap = new Map(fees.map((f) => [f.enrollmentId, f.status]));
+  res.json({
+    yearMonth,
+    rows: enrollments.map((e) => ({
+      enrollmentId: e.id,
+      learnerName: e.user.name,
+      status: feeMap.get(e.id) ?? "PENDING",
+    })),
+  });
+});
+
+router.put("/courses/:slug/fees/:yearMonth", authRequired, async (req: AuthedRequest, res) => {
+  if (!(await assertInstructor(req))) {
+    res.status(403).json({ error: "Instructor access only" });
+    return;
+  }
+  const slug = pathParam(req.params.slug);
+  const yearMonth = pathParam(req.params.yearMonth);
+  if (!slug || !yearMonth || !ymRegex(yearMonth)) {
+    res.status(400).json({ error: "Invalid path" });
+    return;
+  }
+  const parsed = feesPutSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { slug, instructorId: req.userId! },
+    select: { id: true },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Course not found for this instructor" });
+    return;
+  }
+  const validIds = new Set(
+    (
+      await prisma.enrollment.findMany({
+        where: { courseId: course.id },
+        select: { id: true },
+      })
+    ).map((e) => e.id),
+  );
+  for (const row of parsed.data.rows) {
+    if (!validIds.has(row.enrollmentId)) {
+      res.status(400).json({ error: "Unknown enrollment" });
+      return;
+    }
+  }
+  await prisma.$transaction(
+    parsed.data.rows.map((row) =>
+      prisma.enrollmentFeePeriod.upsert({
+        where: {
+          enrollmentId_yearMonth: { enrollmentId: row.enrollmentId, yearMonth },
+        },
+        create: {
+          enrollmentId: row.enrollmentId,
+          yearMonth,
+          status: row.status,
+        },
+        update: { status: row.status },
+      }),
+    ),
+  );
+  res.json({ ok: true });
 });
 
 router.post("/sections", authRequired, async (req: AuthedRequest, res) => {
@@ -888,7 +1692,7 @@ router.get("/payouts/summary", authRequired, async (req: AuthedRequest, res) => 
   });
   res.json({
     demoNote:
-      "Balances use a demo formula (₹500 per enrollment) for UI only — not legal or accounting advice. Wire real payouts with counsel + payment provider.",
+      "No Razorpay or in-app payments — this tab is a manual ledger only. Demo “accrued” uses ₹500 per enrollment for the UI. You submit a request; an admin marks it PAID after you’re settled offline (UPI/bank). Not legal, tax, or accounting advice.",
     enrollmentCount,
     accruedDisplay: formatInrFromPaise(accruedPaise),
     paidOutDisplay: formatInrFromPaise(paidOutPaise),

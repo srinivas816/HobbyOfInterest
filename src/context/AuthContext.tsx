@@ -8,15 +8,25 @@ export type AuthUser = {
   role: string;
   planTier: string;
   specialty: string | null;
+  phone: string | null;
   onboardingCompletedAt: string | null;
 };
+
+export type AuthOutcome = { user: AuthUser; isNewUser: boolean };
 
 type AuthContextValue = {
   user: AuthUser | null;
   token: string | null;
   ready: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
-  register: (email: string, password: string, name: string, role?: "LEARNER" | "INSTRUCTOR") => Promise<AuthUser>;
+  login: (email: string, password: string) => Promise<AuthOutcome>;
+  register: (email: string, password: string, name: string, role?: "LEARNER" | "INSTRUCTOR") => Promise<AuthOutcome>;
+  requestOtp: (phone: string) => Promise<{ ok: boolean; demoOtp?: string; demoOtpHint?: string }>;
+  verifyOtp: (
+    phone: string,
+    code: string,
+    name?: string,
+    role?: "LEARNER" | "INSTRUCTOR",
+  ) => Promise<AuthOutcome>;
   refreshUser: () => Promise<void>;
   logout: () => void;
 };
@@ -43,6 +53,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled)
           setUser({
             ...data.user,
+            phone: data.user.phone ?? null,
             onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
           });
       } catch {
@@ -65,12 +76,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       body: JSON.stringify({ email, password }),
     });
-    const data = await parseJson<{ token: string; user: AuthUser }>(res);
+    const data = await parseJson<{ token: string; user: AuthUser; meta?: { isNewUser?: boolean } }>(res);
     setToken(data.token);
     setTok(data.token);
-    const u = { ...data.user, onboardingCompletedAt: data.user.onboardingCompletedAt ?? null };
+    const u = {
+      ...data.user,
+      phone: data.user.phone ?? null,
+      onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+    };
     setUser(u);
-    return u;
+    return { user: u, isNewUser: data.meta?.isNewUser ?? false };
   }, []);
 
   const register = useCallback(async (email: string, password: string, name: string, role: "LEARNER" | "INSTRUCTOR" = "LEARNER") => {
@@ -78,12 +93,46 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       body: JSON.stringify({ email, password, name, role }),
     });
-    const data = await parseJson<{ token: string; user: AuthUser }>(res);
+    const data = await parseJson<{ token: string; user: AuthUser; meta?: { isNewUser?: boolean } }>(res);
     setToken(data.token);
     setTok(data.token);
-    const u = { ...data.user, onboardingCompletedAt: data.user.onboardingCompletedAt ?? null };
+    const u = {
+      ...data.user,
+      phone: data.user.phone ?? null,
+      onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+    };
     setUser(u);
-    return u;
+    return { user: u, isNewUser: data.meta?.isNewUser ?? true };
+  }, []);
+
+  const requestOtp = useCallback(async (phone: string) => {
+    const res = await apiFetch("/api/auth/otp/request", {
+      method: "POST",
+      body: JSON.stringify({ phone }),
+    });
+    return parseJson<{ ok: boolean; demoOtp?: string; demoOtpHint?: string }>(res);
+  }, []);
+
+  const verifyOtp = useCallback(async (phone: string, code: string, name?: string, role?: "LEARNER" | "INSTRUCTOR") => {
+    const res = await apiFetch("/api/auth/otp/verify", {
+      method: "POST",
+      body: JSON.stringify({
+        phone,
+        code,
+        ...(name?.trim() ? { name: name.trim() } : {}),
+        ...(role ? { role } : {}),
+      }),
+    });
+    const data = await parseJson<{ token: string; user: AuthUser; meta?: { isNewUser?: boolean } }>(res);
+    setToken(data.token);
+    setTok(data.token);
+    const u = {
+      ...data.user,
+      phone: data.user.phone ?? null,
+      onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+    };
+    setUser(u);
+    return { user: u, isNewUser: data.meta?.isNewUser ?? false };
   }, []);
 
   const refreshUser = useCallback(async () => {
@@ -91,7 +140,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (!tok) return;
     const res = await apiFetch("/api/auth/me");
     const data = await parseJson<{ user: AuthUser }>(res);
-    setUser({ ...data.user, onboardingCompletedAt: data.user.onboardingCompletedAt ?? null });
+    setUser({
+      ...data.user,
+      phone: data.user.phone ?? null,
+      onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+    });
   }, []);
 
   const logout = useCallback(() => {
@@ -101,8 +154,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const value = useMemo(
-    () => ({ user, token, ready, login, register, refreshUser, logout }),
-    [user, token, ready, login, register, refreshUser, logout],
+    () => ({ user, token, ready, login, register, requestOtp, verifyOtp, refreshUser, logout }),
+    [user, token, ready, login, register, requestOtp, verifyOtp, refreshUser, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

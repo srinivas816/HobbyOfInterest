@@ -175,6 +175,34 @@ router.get("/", async (req, res) => {
   }
 });
 
+/** Public preview for invite link (no auth). */
+router.get("/by-invite/:code", async (req, res) => {
+  const raw = pathParam(req.params.code)?.trim().toUpperCase();
+  if (!raw || raw.length < 4) {
+    res.status(400).json({ error: "Invalid invite code" });
+    return;
+  }
+  const course = await prisma.course.findFirst({
+    where: { inviteCode: raw },
+    include: { instructor: { select: { name: true } } },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Class not found" });
+    return;
+  }
+  res.json({
+    slug: course.slug,
+    title: course.title,
+    category: course.category,
+    format: course.format,
+    city: course.city,
+    durationLabel: course.durationLabel,
+    priceDisplay: formatInrFromPaise(course.priceCents),
+    instructorName: course.instructor.name,
+    published: course.published,
+  });
+});
+
 router.get("/:slug", optionalAuth, async (req: AuthedRequest, res) => {
   const slug = pathParam(req.params.slug);
   if (!slug) {

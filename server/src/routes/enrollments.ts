@@ -4,11 +4,63 @@ import { prisma } from "../lib/prisma.js";
 import { formatInrFromPaise } from "../lib/inr.js";
 import { authRequired, type AuthedRequest } from "../middleware/auth.js";
 import { pathParam } from "../lib/httpParams.js";
+import { assertInstructorCanAddLearner } from "../lib/instructorEnrollmentCap.js";
+import { funnelLog } from "../lib/funnel.js";
 
 const router = Router();
 
 const enrollSchema = z.object({
   courseSlug: z.string().min(1),
+});
+
+const joinInviteSchema = z.object({
+  inviteCode: z.string().min(4).max(20),
+});
+
+router.post("/join-invite", authRequired, async (req: AuthedRequest, res) => {
+  const parsed = joinInviteSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const code = parsed.data.inviteCode.trim().toUpperCase();
+  const course = await prisma.course.findFirst({
+    where: { inviteCode: code },
+  });
+  if (!course) {
+    res.status(404).json({ error: "Invalid invite code" });
+    return;
+  }
+  const gate = await assertInstructorCanAddLearner(course.instructorId, req.userId!);
+  if (!gate.ok) {
+    res.status(403).json({ error: gate.message });
+    return;
+  }
+  try {
+    await prisma.enrollment.create({
+      data: {
+        userId: req.userId!,
+        courseId: course.id,
+      },
+    });
+  } catch {
+    res.status(409).json({ error: "Already enrolled in this class" });
+    return;
+  }
+
+  await prisma.course.update({
+    where: { id: course.id },
+    data: { studentCount: { increment: 1 } },
+  });
+
+  const rosterSize = await prisma.enrollment.count({ where: { courseId: course.id } });
+  funnelLog(rosterSize <= 1 ? "first_student_joined" : "student_joined", course.instructorId, {
+    courseSlug: course.slug,
+    learnerId: req.userId,
+    rosterSize,
+  });
+
+  res.status(201).json({ ok: true, courseSlug: course.slug });
 });
 
 router.post("/", authRequired, async (req: AuthedRequest, res) => {
@@ -22,6 +74,11 @@ router.post("/", authRequired, async (req: AuthedRequest, res) => {
   });
   if (!course) {
     res.status(404).json({ error: "Class not found" });
+    return;
+  }
+  const gate = await assertInstructorCanAddLearner(course.instructorId, req.userId!);
+  if (!gate.ok) {
+    res.status(403).json({ error: gate.message });
     return;
   }
   try {

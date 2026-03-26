@@ -10,12 +10,14 @@ import { courseCoverSrc } from "@/lib/courseImages";
 import { apiFetch, parseJson } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import type { CourseDetail } from "@/types/course";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 
 const CourseDetailPage = () => {
   const { slug } = useParams<{ slug: string }>();
   const navigate = useNavigate();
   const { user, ready, token } = useAuth();
   const queryClient = useQueryClient();
+  const mvp = mvpInstructorFocus();
   const [reviewRating, setReviewRating] = useState(5);
   const [reviewComment, setReviewComment] = useState("");
 
@@ -198,10 +200,16 @@ const CourseDetailPage = () => {
                 <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-body text-xs">
                   {course.durationLabel}
                 </span>
-                <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-body text-xs">
-                  <Star size={14} className="text-accent fill-accent" /> {course.rating} · {course.studentCount.toLocaleString("en-IN")}{" "}
-                  learners
-                </span>
+                {!mvp ? (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-body text-xs">
+                    <Star size={14} className="text-accent fill-accent" /> {course.rating} · {course.studentCount.toLocaleString("en-IN")}{" "}
+                    learners
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 font-body text-xs">
+                    {course.studentCount.toLocaleString("en-IN")} learners
+                  </span>
+                )}
               </div>
             </ScrollReveal>
 
@@ -270,14 +278,19 @@ const CourseDetailPage = () => {
               {course.isEnrolled ? (
                 <>
                   <Button className="w-full mt-6 rounded-full h-12 text-base font-medium" size="lg" asChild>
-                    <Link to="/learn">Go to My learning</Link>
+                    <Link to={`/learn/${slug}/classroom`}>Open classroom</Link>
                   </Button>
-                  {firstLessonId ? (
+                  <Button variant="outline" className="w-full mt-3 rounded-full h-11" size="lg" asChild>
+                    <Link to="/learn">{mvp ? "My classes" : "Go to My learning"}</Link>
+                  </Button>
+                  {!mvp && firstLessonId ? (
                     <Button variant="outline" className="w-full mt-3 rounded-full h-11" asChild>
                       <Link to={`/learn/${slug}/lesson/${firstLessonId}`}>Open first lesson</Link>
                     </Button>
                   ) : null}
-                  <p className="font-body text-xs text-center text-accent mt-3">You’re enrolled — all lessons are unlocked.</p>
+                  <p className="font-body text-xs text-center text-accent mt-3">
+                    {mvp ? "You’re in — check Classroom for announcements and discussion." : "You’re enrolled — all lessons are unlocked."}
+                  </p>
                 </>
               ) : (
                 <Button
@@ -294,35 +307,39 @@ const CourseDetailPage = () => {
                   Demo: <span className="text-foreground">learner@demo.com</span> / demo12345
                 </p>
               )}
-              <Button
-                variant="outline"
-                className="w-full mt-3 rounded-full h-11"
-                onClick={() => {
-                  if (!token) {
-                    navigate(`/login?next=/courses/${slug}`);
-                    return;
-                  }
-                  favMutation.mutate(!course.isFavorite);
-                }}
-                disabled={favMutation.isPending}
-              >
-                <Heart size={16} className={course.isFavorite ? "fill-accent text-accent" : ""} />{" "}
-                {course.isFavorite ? "Saved to wishlist" : "Save to wishlist"}
-              </Button>
-              <Button
-                variant="secondary"
-                className="w-full mt-3 rounded-full h-11"
-                onClick={() => {
-                  if (!token) {
-                    navigate(`/login?next=/courses/${slug}`);
-                    return;
-                  }
-                  orderMutation.mutate();
-                }}
-                disabled={orderMutation.isPending}
-              >
-                Razorpay checkout (scaffold)
-              </Button>
+              {!mvp ? (
+                <>
+                  <Button
+                    variant="outline"
+                    className="w-full mt-3 rounded-full h-11"
+                    onClick={() => {
+                      if (!token) {
+                        navigate(`/login?next=/courses/${slug}`);
+                        return;
+                      }
+                      favMutation.mutate(!course.isFavorite);
+                    }}
+                    disabled={favMutation.isPending}
+                  >
+                    <Heart size={16} className={course.isFavorite ? "fill-accent text-accent" : ""} />{" "}
+                    {course.isFavorite ? "Saved to wishlist" : "Save to wishlist"}
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    className="w-full mt-3 rounded-full h-11"
+                    onClick={() => {
+                      if (!token) {
+                        navigate(`/login?next=/courses/${slug}`);
+                        return;
+                      }
+                      orderMutation.mutate();
+                    }}
+                    disabled={orderMutation.isPending}
+                  >
+                    Razorpay checkout (scaffold)
+                  </Button>
+                </>
+              ) : null}
               <p className="font-body text-xs text-muted-foreground mt-6 leading-relaxed">
                 30-day satisfaction support on eligible first sessions. Refunds per policy shown at checkout (demo — no payment yet).
               </p>
@@ -330,48 +347,101 @@ const CourseDetailPage = () => {
           </aside>
         </div>
 
-        <section className="mt-14">
-          <h2 className="font-heading text-2xl text-foreground">Curriculum</h2>
-          <p className="font-body text-sm text-muted-foreground mt-2">
-            {course.sections.length} sections · {totalLessons} lessons
-          </p>
-          <div className="mt-6 space-y-4">
-            {course.sections.map((section) => (
-              <div key={section.id} className="rounded-2xl border border-border/60 p-5 bg-card/40">
-                <h3 className="font-heading text-lg">{section.title}</h3>
-                <ul className="mt-3 space-y-2">
-                  {section.lessons.map((lesson) => (
-                    <li key={lesson.id} className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 text-sm font-body text-muted-foreground">
-                      <span className="min-w-0 break-words sm:truncate">
-                        {lesson.title} {lesson.preview ? <span className="text-accent">(Preview)</span> : null}
-                      </span>
-                      <span className="shrink-0 sm:text-right">
-                        {lesson.preview ? (
-                          <Link to={`/learn/${slug}/lesson/${lesson.id}`} className="text-accent hover:underline">
-                            Watch preview · {lesson.durationMin}m
-                          </Link>
-                        ) : !token ? (
-                          <Link to={`/login?next=/courses/${slug}`} className="text-accent hover:underline">
-                            Log in to watch
-                          </Link>
-                        ) : !course.isEnrolled ? (
-                          <button type="button" onClick={scrollToEnroll} className="text-accent hover:underline font-body text-sm">
-                            Enroll to watch · {lesson.durationMin}m
-                          </button>
-                        ) : (
-                          <Link to={`/learn/${slug}/lesson/${lesson.id}`} className="text-accent hover:underline">
-                            Watch · {lesson.durationMin}m
-                          </Link>
-                        )}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ))}
-          </div>
-        </section>
+        {mvp ? (
+          <details className="mt-14 rounded-2xl border border-border/60 bg-card/30 group">
+            <summary className="cursor-pointer list-none px-5 py-4 font-heading text-xl text-foreground [&::-webkit-details-marker]:hidden flex items-center justify-between gap-2">
+              <span>Curriculum (optional)</span>
+              <span className="text-xs font-body text-muted-foreground font-normal">
+                {course.sections.length} sections · {totalLessons} lessons
+              </span>
+            </summary>
+            <div className="px-5 pb-5 border-t border-border/40 pt-4 space-y-4">
+              {course.sections.map((section) => (
+                <div key={section.id} className="rounded-2xl border border-border/60 p-5 bg-card/40">
+                  <h3 className="font-heading text-lg">{section.title}</h3>
+                  <ul className="mt-3 space-y-2">
+                    {section.lessons.map((lesson) => (
+                      <li
+                        key={lesson.id}
+                        className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 text-sm font-body text-muted-foreground"
+                      >
+                        <span className="min-w-0 break-words sm:truncate">
+                          {lesson.title} {lesson.preview ? <span className="text-accent">(Preview)</span> : null}
+                        </span>
+                        <span className="shrink-0 sm:text-right">
+                          {lesson.preview ? (
+                            <Link to={`/learn/${slug}/lesson/${lesson.id}`} className="text-accent hover:underline">
+                              Watch preview · {lesson.durationMin}m
+                            </Link>
+                          ) : !token ? (
+                            <Link to={`/login?next=/courses/${slug}`} className="text-accent hover:underline">
+                              Log in to watch
+                            </Link>
+                          ) : !course.isEnrolled ? (
+                            <button type="button" onClick={scrollToEnroll} className="text-accent hover:underline font-body text-sm">
+                              Enroll to watch · {lesson.durationMin}m
+                            </button>
+                          ) : (
+                            <Link to={`/learn/${slug}/lesson/${lesson.id}`} className="text-accent hover:underline">
+                              Watch · {lesson.durationMin}m
+                            </Link>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </details>
+        ) : (
+          <section className="mt-14">
+            <h2 className="font-heading text-2xl text-foreground">Curriculum</h2>
+            <p className="font-body text-sm text-muted-foreground mt-2">
+              {course.sections.length} sections · {totalLessons} lessons
+            </p>
+            <div className="mt-6 space-y-4">
+              {course.sections.map((section) => (
+                <div key={section.id} className="rounded-2xl border border-border/60 p-5 bg-card/40">
+                  <h3 className="font-heading text-lg">{section.title}</h3>
+                  <ul className="mt-3 space-y-2">
+                    {section.lessons.map((lesson) => (
+                      <li
+                        key={lesson.id}
+                        className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 text-sm font-body text-muted-foreground"
+                      >
+                        <span className="min-w-0 break-words sm:truncate">
+                          {lesson.title} {lesson.preview ? <span className="text-accent">(Preview)</span> : null}
+                        </span>
+                        <span className="shrink-0 sm:text-right">
+                          {lesson.preview ? (
+                            <Link to={`/learn/${slug}/lesson/${lesson.id}`} className="text-accent hover:underline">
+                              Watch preview · {lesson.durationMin}m
+                            </Link>
+                          ) : !token ? (
+                            <Link to={`/login?next=/courses/${slug}`} className="text-accent hover:underline">
+                              Log in to watch
+                            </Link>
+                          ) : !course.isEnrolled ? (
+                            <button type="button" onClick={scrollToEnroll} className="text-accent hover:underline font-body text-sm">
+                              Enroll to watch · {lesson.durationMin}m
+                            </button>
+                          ) : (
+                            <Link to={`/learn/${slug}/lesson/${lesson.id}`} className="text-accent hover:underline">
+                              Watch · {lesson.durationMin}m
+                            </Link>
+                          )}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
 
+        {!mvp ? (
         <section className="mt-14">
           <h2 className="font-heading text-2xl text-foreground">Ratings & reviews</h2>
           <p className="font-body text-sm text-muted-foreground mt-2">
@@ -436,6 +506,7 @@ const CourseDetailPage = () => {
             )}
           </div>
         </section>
+        ) : null}
       </div>
     </main>
   );

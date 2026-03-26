@@ -1,5 +1,6 @@
 import { PrismaClient, Role, PlanTier, CourseFormat } from "@prisma/client";
 import bcrypt from "bcryptjs";
+import { assignInviteCodeIfMissing } from "../src/lib/inviteCode.js";
 
 const prisma = new PrismaClient();
 
@@ -521,6 +522,10 @@ async function main() {
       },
     },
   });
+
+  for (const c of await prisma.course.findMany({ where: { inviteCode: null }, select: { id: true } })) {
+    await assignInviteCodeIfMissing(prisma, c.id);
+  }
 
   console.log("Seed complete. Demo login: learner@demo.com / demo12345");
 }

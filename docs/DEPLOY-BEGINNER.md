@@ -4,6 +4,8 @@ This guide assumes you’ve never deployed a full-stack app before. It explains 
 
 For the **exact click-by-click steps** for this project, use **[DEPLOY.md](./DEPLOY.md)** after you read the concepts below.
 
+For a **single full reference** — repo layout, frontend/backend breakdown, Neon/Render/Netlify, env vars, and **issues we already hit in production** (CORS, Prisma, INT4, Render port binding, etc.) — see **[APPLICATION-AND-DEPLOY-REFERENCE.md](./APPLICATION-AND-DEPLOY-REFERENCE.md)**.
+
 ---
 
 ## 1. What “deploy” means here

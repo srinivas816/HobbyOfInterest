@@ -23,8 +23,21 @@ import PrivacyPage from "./pages/PrivacyPage.tsx";
 import TermsPage from "./pages/TermsPage.tsx";
 import CookiesPage from "./pages/CookiesPage.tsx";
 import SettingsPage from "./pages/SettingsPage.tsx";
+import JoinClassPage from "./pages/JoinClassPage.tsx";
+import InstructorActivatePage from "./pages/InstructorActivatePage.tsx";
+import InstructorClassReadyPage from "./pages/InstructorClassReadyPage.tsx";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 45_000,
+      gcTime: 5 * 60_000,
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+    mutations: { retry: 0 },
+  },
+});
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
@@ -45,8 +58,11 @@ const App = () => (
               <Route path="/learn" element={<LearnPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/wishlist" element={<WishlistPage />} />
+              <Route path="/instructor/activate" element={<InstructorActivatePage />} />
+              <Route path="/instructor/class-ready/:slug" element={<InstructorClassReadyPage />} />
               <Route path="/instructor/studio" element={<InstructorStudioPage />} />
               <Route path="/admin/moderation" element={<AdminModerationPage />} />
+              <Route path="/join/:code" element={<JoinClassPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />

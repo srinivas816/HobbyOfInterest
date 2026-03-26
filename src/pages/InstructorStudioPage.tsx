@@ -1,25 +1,31 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  CalendarClock,
   ChevronDown,
   ChevronUp,
   ClipboardList,
   Info,
+  Link2,
   Loader2,
   Megaphone,
   MessageCircle,
   Plus,
+  RefreshCw,
+  Search,
   Shield,
   Trash2,
+  UserPlus,
   Users,
   Wallet,
 } from "lucide-react";
-import { Link, Navigate } from "react-router-dom";
+import { Link, Navigate, useLocation, useSearchParams } from "react-router-dom";
 import { toast } from "sonner";
 import { apiFetch, parseJson } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { courseCoverSrc } from "@/lib/courseImages";
 import { Button } from "@/components/ui/button";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 
 const IMAGE_KEYS = [
   "hero-pottery",
@@ -131,6 +137,53 @@ const InstructorStudioPage = () => {
   const [taxGstin, setTaxGstin] = useState("");
   const [studioAnswerDraft, setStudioAnswerDraft] = useState<Record<string, string>>({});
   const taxHydratedRef = useRef(false);
+  const [selectedSessionId, setSelectedSessionId] = useState("");
+  const [feeYearMonth, setFeeYearMonth] = useState(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+  });
+  const [newSessionHeldAt, setNewSessionHeldAt] = useState(() => {
+    const d = new Date();
+    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
+    return d.toISOString().slice(0, 16);
+  });
+  const [attendanceDraft, setAttendanceDraft] = useState<Record<string, boolean>>({});
+  const [rosterSearch, setRosterSearch] = useState("");
+  const [bulkEnrollInput, setBulkEnrollInput] = useState("");
+  const [bulkNamesInput, setBulkNamesInput] = useState("");
+  const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+
+  const [searchParams] = useSearchParams();
+  const location = useLocation();
+  const mvpFocus = mvpInstructorFocus();
+
+  useEffect(() => {
+    const tool = searchParams.get("tool");
+    if (tool === "roster" || tool === "announce" || tool === "discussion" || tool === "assign" || tool === "payout") {
+      setToolTab(tool);
+    }
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (location.pathname !== "/instructor/studio" || !location.hash) return;
+    const id = location.hash.replace(/^#/, "");
+    const t = window.setTimeout(() => {
+      document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+    return () => window.clearTimeout(t);
+  }, [location.pathname, location.hash]);
+
+  useEffect(() => {
+    if (searchParams.get("setup") !== "1") return;
+    const t = window.setTimeout(() => {
+      document.getElementById("studio-create-class")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 250);
+    return () => window.clearTimeout(t);
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (mvpFocus && toolTab === "assign") setToolTab("roster");
+  }, [mvpFocus, toolTab]);
 
   const profileQuery = useQuery({
     queryKey: ["instructor-profile"],
@@ -195,17 +248,43 @@ const InstructorStudioPage = () => {
     },
   });
 
+  const growthEnrollmentCount = useMemo(() => {
+    const rows = analyticsQuery.data?.courses;
+    if (rows?.length) return rows.reduce((n, c) => n + c.enrollmentCount, 0);
+    return analyticsQuery.data?.totals?.enrollments ?? 0;
+  }, [analyticsQuery.data]);
+
   const rosterQuery = useQuery({
-    queryKey: ["studio-roster", rosterCourseSlug],
-    enabled: Boolean(token && user?.role === "INSTRUCTOR" && rosterCourseSlug),
+    queryKey: ["studio-roster", rosterCourseSlug, feeYearMonth],
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && rosterCourseSlug && feeYearMonth),
     queryFn: async () => {
-      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/roster`);
+      const res = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/roster?feeMonth=${encodeURIComponent(feeYearMonth)}`,
+      );
       return parseJson<{
-        course: { title: string; slug: string };
+        course: {
+          title: string;
+          slug: string;
+          monthlyFeeDisplay: string;
+          feeMonth: string;
+        };
+        summary: {
+          totalStudents: number;
+          presentTodayCount: number;
+          pendingFeesCount: number;
+          todaysSessionId: string | null;
+        };
         students: Array<{
           enrollmentId: string;
           enrolledAt: string;
-          learner: { id: string; name: string; email: string };
+          feeStatus: "PAID" | "PENDING";
+          learner: { id: string; name: string; email: string; phone: string | null };
+          stats: {
+            sessionsHeld: number;
+            sessionsPresent: number;
+            feeRecentPaidCount: number;
+            feeRecentMonthCount: number;
+          };
         }>;
       }>(res);
     },
@@ -307,9 +386,146 @@ const InstructorStudioPage = () => {
     },
   });
 
+  const inviteQuery = useQuery({
+    queryKey: ["studio-invite", rosterCourseSlug],
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && rosterCourseSlug),
+    queryFn: async () => {
+      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/invite`);
+      return parseJson<{ inviteCode: string }>(res);
+    },
+  });
+
+  const sessionsQuery = useQuery({
+    queryKey: ["studio-sessions", rosterCourseSlug],
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && rosterCourseSlug),
+    queryFn: async () => {
+      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/sessions`);
+      return parseJson<{
+        sessions: Array<{
+          id: string;
+          heldAt: string;
+          label: string | null;
+          presentCount: number;
+          totalMarked: number;
+        }>;
+      }>(res);
+    },
+  });
+
+  const subSummaryQuery = useQuery({
+    queryKey: ["instructor-subscription-summary"],
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && mvpFocus),
+    queryFn: async () => {
+      const res = await apiFetch("/api/instructor-studio/subscription-summary");
+      return parseJson<{
+        planTier: string;
+        trialActive: boolean;
+        trialEndsAt: string | null;
+        trialDays: number;
+        distinctLearnerCount: number;
+        freeLearnerCap: number;
+        capEnforced: boolean;
+        capReached: boolean;
+        paid: boolean;
+        monthlyPriceDisplay: string;
+        upgradeNote: string;
+        checkoutLive?: boolean;
+      }>(res);
+    },
+  });
+
+  const instructorDashQuery = useQuery({
+    queryKey: ["instructor-dashboard-today"],
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && mvpFocus),
+    queryFn: async () => {
+      const res = await apiFetch("/api/instructor-studio/dashboard-today");
+      return parseJson<{
+        sessionsToday: number;
+        pendingAttendanceCount: number;
+        pendingFeesCount: number;
+        feeMonth: string;
+        alerts?: Array<{ id: string; kind: string; message: string; severity: "info" | "warning" }>;
+      }>(res);
+    },
+    staleTime: 45_000,
+  });
+
+  const alertsStorageKey = `hi-dismiss-alerts-${new Date().toISOString().slice(0, 10)}`;
+
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem(alertsStorageKey);
+      if (raw) setDismissedAlertIds(JSON.parse(raw) as string[]);
+    } catch {
+      /* ignore */
+    }
+  }, [alertsStorageKey]);
+
+  const visibleInstructorAlerts = useMemo(() => {
+    return (instructorDashQuery.data?.alerts ?? []).filter((a) => !dismissedAlertIds.includes(a.id));
+  }, [instructorDashQuery.data?.alerts, dismissedAlertIds]);
+
+  const dismissInstructorAlert = (id: string) => {
+    setDismissedAlertIds((prev) => {
+      if (prev.includes(id)) return prev;
+      const next = [...prev, id];
+      try {
+        sessionStorage.setItem(alertsStorageKey, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const sessionsToday = useMemo(() => {
+    const list = sessionsQuery.data?.sessions ?? [];
+    const today = new Date();
+    return list.filter((s) => {
+      const d = new Date(s.heldAt);
+      return (
+        d.getFullYear() === today.getFullYear() &&
+        d.getMonth() === today.getMonth() &&
+        d.getDate() === today.getDate()
+      );
+    });
+  }, [sessionsQuery.data?.sessions]);
+
+  useEffect(() => {
+    const tid = rosterQuery.data?.summary?.todaysSessionId;
+    const sessions = sessionsQuery.data?.sessions ?? [];
+    if (!tid || !sessions.some((s) => s.id === tid)) return;
+    setSelectedSessionId((prev) => prev || tid);
+  }, [rosterQuery.data?.summary?.todaysSessionId, sessionsQuery.data?.sessions]);
+
+  const attendanceQuery = useQuery({
+    queryKey: ["studio-attendance", rosterCourseSlug, selectedSessionId],
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && rosterCourseSlug && selectedSessionId),
+    queryFn: async () => {
+      const res = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/sessions/${encodeURIComponent(selectedSessionId)}/attendance`,
+      );
+      return parseJson<{ students: Array<{ enrollmentId: string; name: string; present: boolean }> }>(res);
+    },
+  });
+
   useEffect(() => {
     setViewSubmissionsAssignmentId("");
   }, [rosterCourseSlug]);
+
+  useEffect(() => {
+    setSelectedSessionId("");
+  }, [rosterCourseSlug]);
+
+  useEffect(() => {
+    if (!attendanceQuery.data) {
+      setAttendanceDraft({});
+      return;
+    }
+    const o: Record<string, boolean> = {};
+    for (const s of attendanceQuery.data.students) o[s.enrollmentId] = s.present;
+    setAttendanceDraft(o);
+  }, [attendanceQuery.data]);
 
   useEffect(() => {
     if (taxHydratedRef.current || !payoutSummaryQuery.data) return;
@@ -321,10 +537,39 @@ const InstructorStudioPage = () => {
   }, [payoutSummaryQuery.data]);
 
   const courses = data?.courses ?? [];
+  const filteredRosterStudents = useMemo(() => {
+    const q = rosterSearch.trim().toLowerCase();
+    const list = rosterQuery.data?.students ?? [];
+    if (!q) return list;
+    return list.filter(
+      (s) =>
+        s.learner.name.toLowerCase().includes(q) ||
+        s.learner.email.toLowerCase().includes(q) ||
+        (s.learner.phone?.toLowerCase().includes(q) ?? false),
+    );
+  }, [rosterQuery.data?.students, rosterSearch]);
   const sectionOptions = useMemo(
     () => courses.find((c) => c.slug === selectedCourseSlug)?.sections ?? [],
     [courses, selectedCourseSlug],
   );
+
+  const applyAnnouncePreset = (k: "update" | "cancel" | "fee") => {
+    const t =
+      rosterQuery.data?.course.title ??
+      courses.find((c) => c.slug === rosterCourseSlug)?.title ??
+      "our class";
+    const feeDisp = rosterQuery.data?.course.monthlyFeeDisplay ?? "Monthly fee";
+    if (k === "update") {
+      setAnnounceTitle("Class update");
+      setAnnounceBody(`Quick update for ${t}:\n\n`);
+    } else if (k === "cancel") {
+      setAnnounceTitle("Class cancelled");
+      setAnnounceBody(`Hi everyone — today's ${t} session is cancelled. I'll confirm the next date soon.\n`);
+    } else {
+      setAnnounceTitle("Fee reminder");
+      setAnnounceBody(`Friendly reminder: ${feeDisp} for ${t} is due. Thank you!\n`);
+    }
+  };
 
   useEffect(() => {
     const st: Record<string, string> = {};
@@ -361,15 +606,22 @@ const InstructorStudioPage = () => {
     });
   }, [editingSlug, courses]);
 
+  const classFromUrl = searchParams.get("class");
+  const focusInvite = searchParams.get("focusInvite") === "1";
+
   useEffect(() => {
     if (courses.length === 0) {
       setRosterCourseSlug("");
       return;
     }
+    if (classFromUrl && courses.some((c) => c.slug === classFromUrl)) {
+      setRosterCourseSlug(classFromUrl);
+      return;
+    }
     if (!rosterCourseSlug || !courses.some((c) => c.slug === rosterCourseSlug)) {
       setRosterCourseSlug(courses[0]!.slug);
     }
-  }, [courses, rosterCourseSlug]);
+  }, [courses, rosterCourseSlug, classFromUrl]);
 
   const invalidateStudio = () => {
     queryClient.invalidateQueries({ queryKey: ["studio-courses"] });
@@ -379,6 +631,7 @@ const InstructorStudioPage = () => {
     queryClient.invalidateQueries({ queryKey: ["studio-payout-summary"] });
     queryClient.invalidateQueries({ queryKey: ["classroom-assignments"] });
     queryClient.invalidateQueries({ queryKey: ["classroom-announcements"] });
+    queryClient.invalidateQueries({ queryKey: ["instructor-subscription-summary"] });
   };
 
   const addSection = useMutation({
@@ -603,6 +856,36 @@ const InstructorStudioPage = () => {
     onError: (e: Error) => toast.error(e.message || "Failed to post"),
   });
 
+  const postAnnouncementShareWhatsApp = async () => {
+    if (!rosterCourseSlug || announceBody.trim().length < 10) {
+      toast.error("Write your message (10+ characters) first.");
+      return;
+    }
+    const title = announceTitle.trim();
+    const body = announceBody.trim();
+    try {
+      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/announcements`, {
+        method: "POST",
+        body: JSON.stringify({
+          title: title || undefined,
+          body,
+          emailLearners: announceEmailLearners,
+        }),
+      });
+      await parseJson(res);
+      setAnnounceTitle("");
+      setAnnounceBody("");
+      setAnnounceEmailLearners(false);
+      queryClient.invalidateQueries({ queryKey: ["studio-announcements", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["classroom-announcements", rosterCourseSlug] });
+      const waText = `${title ? `${title}\n\n` : ""}${body}\n\n— Shared from Hobby of Interest (students also see this in Classroom).`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(waText)}`, "_blank", "noopener,noreferrer");
+      toast.success("Posted in app — WhatsApp opened to share with your batch");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not post");
+    }
+  };
+
   const createStudioAssignment = useMutation({
     mutationFn: async () => {
       if (!rosterCourseSlug) throw new Error("Pick a class first");
@@ -703,6 +986,131 @@ const InstructorStudioPage = () => {
     onError: (e: Error) => toast.error(e.message || "Request failed"),
   });
 
+  const regenerateInvite = useMutation({
+    mutationFn: async () => {
+      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/invite/regenerate`, {
+        method: "POST",
+      });
+      return parseJson<{ inviteCode: string }>(res);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["studio-invite", rosterCourseSlug] });
+      toast.success("Invite code rotated");
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed"),
+  });
+
+  const createClassSession = useMutation({
+    mutationFn: async () => {
+      const heldAt = new Date(newSessionHeldAt);
+      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/sessions`, {
+        method: "POST",
+        body: JSON.stringify({ heldAt: heldAt.toISOString() }),
+      });
+      return parseJson<{ session: { id: string } }>(res);
+    },
+    onSuccess: (out) => {
+      queryClient.invalidateQueries({ queryKey: ["studio-sessions", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["studio-roster", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
+      setSelectedSessionId(out.session.id);
+      toast.success("Session added — tap Present/Absent below");
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed"),
+  });
+
+  const createClassSessionNow = useMutation({
+    mutationFn: async () => {
+      if (!rosterCourseSlug) throw new Error("Pick a class first");
+      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/sessions`, {
+        method: "POST",
+        body: JSON.stringify({ heldAt: new Date().toISOString() }),
+      });
+      return parseJson<{ session: { id: string } }>(res);
+    },
+    onSuccess: (out) => {
+      queryClient.invalidateQueries({ queryKey: ["studio-sessions", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["studio-roster", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
+      setSelectedSessionId(out.session.id);
+      toast.success("Logged class now — mark attendance");
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed"),
+  });
+
+  const saveAttendanceMvp = useMutation({
+    mutationFn: async () => {
+      const marks = Object.entries(attendanceDraft).map(([enrollmentId, present]) => ({ enrollmentId, present }));
+      const res = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/sessions/${encodeURIComponent(selectedSessionId)}/attendance`,
+        { method: "PUT", body: JSON.stringify({ marks }) },
+      );
+      await parseJson<{ ok: boolean }>(res);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["studio-attendance", rosterCourseSlug, selectedSessionId] });
+      queryClient.invalidateQueries({ queryKey: ["studio-sessions", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["studio-roster", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
+      toast.success("Attendance saved");
+    },
+    onError: (e: Error) => toast.error(e.message || "Failed"),
+  });
+
+  const bulkEnrollMut = useMutation({
+    mutationFn: async () => {
+      if (!rosterCourseSlug) throw new Error("Pick a class first");
+      const lines = bulkEnrollInput.split(/[\r\n]+/).map((l) => l.trim()).filter(Boolean);
+      if (lines.length === 0) throw new Error("Paste one email or phone number per line");
+      const res = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/roster/bulk-enroll`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ lines }),
+        },
+      );
+      return parseJson<{
+        enrolled: string[];
+        alreadyEnrolled: string[];
+        notFound: string[];
+        invalidFormat: string[];
+        blocked: Array<{ line: string; message: string }>;
+        skippedDuplicate: string[];
+      }>(res);
+    },
+    onSuccess: (out) => {
+      setBulkEnrollInput("");
+      queryClient.invalidateQueries({ queryKey: ["studio-roster", rosterCourseSlug] });
+      queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
+      queryClient.invalidateQueries({ queryKey: ["studio-analytics"] });
+      const parts = [
+        out.enrolled.length ? `${out.enrolled.length} added` : "",
+        out.alreadyEnrolled.length ? `${out.alreadyEnrolled.length} already in class` : "",
+        out.notFound.length ? `${out.notFound.length} no matching account` : "",
+        out.invalidFormat.length ? `${out.invalidFormat.length} invalid lines` : "",
+        out.blocked.length ? `${out.blocked.length} blocked (plan/cap)` : "",
+      ].filter(Boolean);
+      toast.success(parts.length ? parts.join(" · ") : "No changes");
+    },
+    onError: (e: Error) => toast.error(e.message || "Bulk add failed"),
+  });
+
+  const saveFeeOne = useMutation({
+    mutationFn: async ({ enrollmentId, status }: { enrollmentId: string; status: "PAID" | "PENDING" }) => {
+      const res = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(rosterCourseSlug)}/fees/${encodeURIComponent(feeYearMonth)}`,
+        { method: "PUT", body: JSON.stringify({ rows: [{ enrollmentId, status }] }) },
+      );
+      await parseJson<{ ok: boolean }>(res);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["studio-roster", rosterCourseSlug, feeYearMonth] });
+      queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
+    },
+    onError: (e: Error) => toast.error(e.message || "Could not update fee"),
+  });
+
   useEffect(() => {
     if (!profileQuery.data) return;
     if (!profileName) setProfileName(profileQuery.data.profile.name ?? "");
@@ -752,7 +1160,13 @@ const InstructorStudioPage = () => {
     document.getElementById("studio-create-class")?.scrollIntoView({ behavior: "smooth", block: "start" });
   };
 
-  if (!ready) return <main className="container mx-auto py-20">Loading...</main>;
+  if (!ready) {
+    return (
+      <main className="container mx-auto py-24 flex justify-center">
+        <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden />
+      </main>
+    );
+  }
   if (!token) return <Navigate to="/login?next=/instructor/studio" replace />;
   if (user?.role !== "INSTRUCTOR") return <main className="container mx-auto py-20">Instructor access only.</main>;
 
@@ -762,10 +1176,19 @@ const InstructorStudioPage = () => {
     <main className="container mx-auto py-16 pb-24">
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl">Instructor Studio</h1>
+          <h1 className="font-heading text-3xl">{mvpFocus ? "Your classes & students" : "Instructor Studio"}</h1>
           <p className="text-sm text-muted-foreground mt-2 max-w-2xl font-body leading-relaxed">
-            Edit class listings, curriculum, and media. Use Teaching tools for roster, announcements, Q&amp;A, assignments, and demo payouts;
-            learners use Classroom from their enrollments for the same discussions and submissions.
+            {mvpFocus ? (
+              <>
+                Create a class, invite students with a link or WhatsApp, then use Teaching tools for attendance and monthly fees. Video lessons
+                and full curriculum live under <span className="text-foreground/90">Advanced</span> below — optional for day one.
+              </>
+            ) : (
+              <>
+                Edit class listings, curriculum, and media. Use Teaching tools for roster, announcements, Q&amp;A, assignments, and demo payouts;
+                learners use Classroom from their enrollments for the same discussions and submissions.
+              </>
+            )}
           </p>
         </div>
         {isAdmin ? (
@@ -778,6 +1201,240 @@ const InstructorStudioPage = () => {
           </Link>
         ) : null}
       </div>
+
+      {mvpFocus && visibleInstructorAlerts.length > 0 ? (
+        <div className="mt-5 space-y-2" role="status" aria-live="polite">
+          {visibleInstructorAlerts.map((a) => (
+            <div
+              key={a.id}
+              className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-amber-500/45 bg-amber-500/[0.12] px-4 py-3"
+            >
+              <p className="text-sm font-body text-foreground flex-1 min-w-0">{a.message}</p>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Button variant="outline" size="sm" className="rounded-full" asChild>
+                  <Link to="/instructor/studio?tool=roster#studio-teaching-tools">Open roster</Link>
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="rounded-full text-muted-foreground"
+                  onClick={() => dismissInstructorAlert(a.id)}
+                >
+                  Dismiss today
+                </Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {mvpFocus && (data?.courses?.length ?? 0) > 0 ? (
+        <div
+          className={`mt-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-2xl border px-4 py-4 sm:px-5 ${
+            !analyticsQuery.isPending && growthEnrollmentCount === 0
+              ? "border-2 border-accent/50 bg-gradient-to-r from-accent/18 to-card/80"
+              : "border-accent/35 bg-gradient-to-r from-accent/12 to-card/80"
+          }`}
+        >
+          <div className="min-w-0">
+            <p className="font-heading text-base text-foreground">
+              {!analyticsQuery.isPending && growthEnrollmentCount === 0
+                ? "0 students yet — invite your first student to begin"
+                : "Invite more students to grow your class"}
+            </p>
+            <p className="text-sm text-muted-foreground font-body mt-1">
+              {analyticsQuery.isPending ? (
+                <span className="inline-flex items-center gap-2">
+                  <Loader2 className="h-4 w-4 animate-spin text-accent" aria-hidden />
+                  Loading student count…
+                </span>
+              ) : growthEnrollmentCount === 0 ? (
+                <>Your class is live; activation starts when someone joins via your invite link.</>
+              ) : (
+                <>
+                  <span className="font-semibold text-foreground">{growthEnrollmentCount}</span>{" "}
+                  {growthEnrollmentCount === 1 ? "student has" : "students have"} joined across your classes. Share your link on WhatsApp anytime.
+                </>
+              )}
+            </p>
+          </div>
+          <Button variant="secondary" className="rounded-full shrink-0" asChild>
+            <Link to="/instructor/studio?tool=roster#studio-teaching-tools">Open invite</Link>
+          </Button>
+        </div>
+      ) : null}
+
+      {mvpFocus && subSummaryQuery.data ? (
+        <div
+          className={`mt-6 rounded-2xl border p-5 md:p-6 ${
+            subSummaryQuery.data.capReached ? "border-destructive/40 bg-destructive/5" : "border-accent/35 bg-accent/5"
+          }`}
+        >
+          <p className="font-heading text-lg text-foreground">
+            {subSummaryQuery.data.paid
+              ? "Your plan"
+              : subSummaryQuery.data.trialActive
+                ? `Free trial — unlimited students for ${subSummaryQuery.data.trialDays} days`
+                : subSummaryQuery.data.capReached
+                  ? `Free limit reached (${subSummaryQuery.data.freeLearnerCap} students)`
+                  : "Free tier"}
+          </p>
+          <p className="text-sm text-muted-foreground mt-2 font-body leading-relaxed">
+            {subSummaryQuery.data.paid ? (
+              <>
+                You’re on <span className="text-foreground font-medium">{subSummaryQuery.data.planTier.replace(/_/g, " ")}</span> — no
+                student cap from this check.
+              </>
+            ) : subSummaryQuery.data.trialActive ? (
+              <>
+                After your trial ends, stay on free for up to{" "}
+                <span className="text-foreground font-medium">{subSummaryQuery.data.freeLearnerCap}</span> unique students, or upgrade to{" "}
+                <span className="text-foreground font-medium">{subSummaryQuery.data.monthlyPriceDisplay}</span> for higher limits
+                {subSummaryQuery.data.checkoutLive ? " (Razorpay in Settings)." : " (see note below when checkout is not live)."}
+              </>
+            ) : subSummaryQuery.data.capReached ? (
+              <>
+                <span className="text-foreground font-semibold">Free limit reached — you can&apos;t add more students without upgrading.</span>{" "}
+                Upgrade to Pro ({subSummaryQuery.data.monthlyPriceDisplay}) to keep growing.
+              </>
+            ) : (
+              <>
+                Up to <span className="text-foreground font-medium">{subSummaryQuery.data.freeLearnerCap}</span> unique students across all your
+                classes. Upgrade: <span className="text-foreground font-medium">{subSummaryQuery.data.monthlyPriceDisplay}</span>.
+              </>
+            )}
+          </p>
+          {!subSummaryQuery.data.paid &&
+          !subSummaryQuery.data.trialActive &&
+          !subSummaryQuery.data.capReached &&
+          subSummaryQuery.data.distinctLearnerCount >= subSummaryQuery.data.freeLearnerCap - 2 ? (
+            <p className="mt-3 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm font-body text-foreground">
+              You’ve added{" "}
+              <span className="font-semibold">
+                {subSummaryQuery.data.distinctLearnerCount}/{subSummaryQuery.data.freeLearnerCap}
+              </span>{" "}
+              students — upgrade to continue growing your class.
+            </p>
+          ) : null}
+          <p className="text-xs text-muted-foreground mt-2 font-body">{subSummaryQuery.data.upgradeNote}</p>
+          <p className="text-sm mt-4 font-body">
+            <span className="font-semibold text-foreground">{subSummaryQuery.data.distinctLearnerCount}</span> students on your roster
+            (distinct learners)
+            {!subSummaryQuery.data.capEnforced ? (
+              <span className="text-muted-foreground">
+                {" "}
+                · cap enforcement is off on the server (set <code className="text-[11px]">INSTRUCTOR_ENFORCE_CAP=1</code>)
+              </span>
+            ) : null}
+          </p>
+          {!subSummaryQuery.data.paid ? (
+            <div className="mt-4 flex flex-wrap gap-2">
+              <Button className="rounded-full" asChild>
+                <Link to="/settings#instructor-plan">
+                  {subSummaryQuery.data.capReached && !subSummaryQuery.data.trialActive ? "Upgrade ₹299" : "Upgrade"}
+                </Link>
+              </Button>
+              <Button variant="outline" className="rounded-full" asChild>
+                <Link to="/settings#instructor-plan">Plan &amp; billing details</Link>
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {mvpFocus && focusInvite && rosterCourseSlug ? (
+        <div className="mt-6 rounded-2xl border-2 border-accent/50 bg-gradient-to-br from-accent/15 to-background p-6 md:p-8 space-y-4">
+          <div>
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-accent font-body">Next step</p>
+            <h2 className="font-heading text-2xl text-foreground mt-1">Invite your students now</h2>
+            <p className="text-sm text-muted-foreground mt-2 font-body">
+              Send the link on WhatsApp or copy it — learners open it, sign in, and join in one flow.
+            </p>
+          </div>
+          {inviteQuery.isLoading ? (
+            <Loader2 className="animate-spin text-accent" size={28} />
+          ) : inviteQuery.data ? (
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+              <Button
+                className="rounded-full h-12 px-8 text-base w-full sm:w-auto bg-emerald-600 hover:bg-emerald-700 text-white"
+                asChild
+              >
+                <a
+                  href={`https://wa.me/?text=${encodeURIComponent(
+                    `Join my class on Hobby of Interest:\n${typeof window !== "undefined" ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}` : inviteQuery.data.inviteCode}`,
+                  )}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <MessageCircle className="inline mr-2 h-5 w-5" aria-hidden />
+                  WhatsApp invite
+                </a>
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                className="rounded-full h-12 px-8 text-base w-full sm:w-auto"
+                onClick={() => {
+                  const url =
+                    typeof window !== "undefined"
+                      ? `${window.location.origin}/join/${inviteQuery.data!.inviteCode}`
+                      : inviteQuery.data!.inviteCode;
+                  void navigator.clipboard.writeText(url);
+                  toast.success("Invite link copied");
+                }}
+              >
+                <Link2 className="inline mr-2 h-4 w-4" aria-hidden />
+                Copy invite link
+              </Button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {mvpFocus && rosterCourseSlug ? (
+        <div className="mt-4 rounded-2xl border border-border/60 bg-card/50 p-4 md:p-5 flex flex-col sm:flex-row gap-4 sm:items-center sm:justify-between">
+          <div className="flex gap-3 min-w-0">
+            <div className="shrink-0 rounded-xl bg-accent/15 p-2 h-fit">
+              <CalendarClock className="text-accent" size={20} aria-hidden />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-foreground font-body">Today</p>
+              <p className="text-xs text-muted-foreground mt-1 font-body leading-relaxed">
+                {sessionsToday.length > 0
+                  ? `${sessionsToday.length} session(s) dated today for the class selected below — open Attendance & invite to mark who was present.`
+                  : "Add a session for today (Teaching tools), mark attendance, or post a quick announcement so parents see activity."}
+              </p>
+            </div>
+          </div>
+          <div className="flex flex-wrap gap-2 shrink-0">
+            <Button
+              type="button"
+              variant="secondary"
+              size="sm"
+              className="rounded-full"
+              onClick={() => {
+                setToolTab("roster");
+                document.getElementById("studio-teaching-tools")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              Attendance & invite
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="rounded-full"
+              onClick={() => {
+                setToolTab("announce");
+                document.getElementById("studio-teaching-tools")?.scrollIntoView({ behavior: "smooth", block: "start" });
+              }}
+            >
+              Post update
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {user && !user.onboardingCompletedAt && (
         <div className="mt-6 rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -796,8 +1453,8 @@ const InstructorStudioPage = () => {
       {isLoading && <Loader2 size={26} className="animate-spin text-accent mt-8" />}
 
       {!isLoading && (
-        <>
-          <div className="mt-8 rounded-2xl border border-border/60 bg-card/50 p-6">
+        <div className={mvpFocus ? "flex flex-col" : undefined}>
+          <div className={`mt-8 rounded-2xl border border-border/60 bg-card/50 p-6${mvpFocus ? " order-3" : ""}`}>
             <h2 className="font-heading text-xl">Tutor profile</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
               <input className="rounded-xl border p-2.5" value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="Display name" />
@@ -813,7 +1470,7 @@ const InstructorStudioPage = () => {
             </button>
           </div>
 
-          <div id="studio-analytics" className="mt-6 scroll-mt-28 rounded-2xl border border-border/60 bg-card/50 p-6">
+          <div id="studio-analytics" className={`mt-6 scroll-mt-28 rounded-2xl border border-border/60 bg-card/50 p-6${mvpFocus ? " order-4" : ""}`}>
             <div className="flex items-start gap-2">
               <Info size={18} className="text-accent shrink-0 mt-0.5" />
               <div>
@@ -857,14 +1514,23 @@ const InstructorStudioPage = () => {
             )}
           </div>
 
-          <div className="mt-6 rounded-2xl border border-border/60 bg-card/50 p-6">
+          <div id="studio-teaching-tools" className={`mt-6 scroll-mt-28 rounded-2xl border border-border/60 bg-card/50 p-6${mvpFocus ? " order-2" : ""}`}>
             <div className="flex items-center gap-2 mb-2">
               <Users size={20} className="text-accent" />
               <h2 className="font-heading text-xl">Teaching tools</h2>
             </div>
             <p className="text-xs text-muted-foreground font-body leading-relaxed">
-              Roster, announcements (optional email when SMTP is set), Q&amp;A replies, assignments with submissions, and demo payouts. Learners use{" "}
-              <span className="text-foreground font-medium">Classroom</span> from My learning for the same threads.
+              {mvpFocus ? (
+                <>
+                  Roster, <span className="text-foreground font-medium">invite link</span> &amp; WhatsApp, attendance, monthly fees, announcements,
+                  and Q&amp;A. Learners open <span className="text-foreground font-medium">Classroom</span> from My classes.
+                </>
+              ) : (
+                <>
+                  Roster, announcements (optional email when SMTP is set), Q&amp;A replies, assignments with submissions, and demo payouts. Learners
+                  use <span className="text-foreground font-medium">Classroom</span> from My learning for the same threads.
+                </>
+              )}
             </p>
             <div className="mt-4 flex flex-wrap gap-3 items-end">
               <div className="flex flex-col gap-1">
@@ -904,7 +1570,7 @@ const InstructorStudioPage = () => {
                   ["roster", "Roster", Users],
                   ["announce", "Announce", Megaphone],
                   ["discussion", "Q&A", MessageCircle],
-                  ["assign", "Assignments", ClipboardList],
+                  ...(mvpFocus ? [] : ([["assign", "Assignments", ClipboardList]] as const)),
                   ["payout", "Payouts", Wallet],
                 ] as const
               ).map(([id, label, Icon]) => (
@@ -930,34 +1596,449 @@ const InstructorStudioPage = () => {
                   <Loader2 size={20} className="animate-spin text-accent mt-4" />
                 ) : null}
                 {rosterQuery.data && rosterCourseSlug ? (
-                  <div className="mt-4 rounded-xl border border-border/50 overflow-x-auto">
-                    <table className="w-full text-left text-sm font-body">
-                      <thead>
-                        <tr className="border-b border-border/50 bg-muted/30">
-                          <th className="p-3 font-medium">Learner</th>
-                          <th className="p-3 font-medium">Email</th>
-                          <th className="p-3 font-medium">Enrolled</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {rosterQuery.data.students.length === 0 ? (
-                          <tr>
-                            <td colSpan={3} className="p-4 text-muted-foreground">
-                              No enrollments yet for this class.
-                            </td>
-                          </tr>
-                        ) : (
-                          rosterQuery.data.students.map((row) => (
-                            <tr key={row.enrollmentId} className="border-b border-border/40">
-                              <td className="p-3">{row.learner.name}</td>
-                              <td className="p-3 text-muted-foreground">{row.learner.email}</td>
-                              <td className="p-3 text-muted-foreground text-xs">{new Date(row.enrolledAt).toLocaleString()}</td>
-                            </tr>
-                          ))
-                        )}
-                      </tbody>
-                    </table>
-                  </div>
+                  <>
+                    <div className="mt-4 space-y-4">
+                      <div className="rounded-2xl border border-border/60 bg-card/70 p-4 sm:p-5 space-y-3">
+                        <div className="flex flex-wrap gap-3 sm:gap-6 text-sm font-body">
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Students</p>
+                            <p className="font-heading text-xl text-foreground">{rosterQuery.data.summary.totalStudents}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Present today</p>
+                            <p className="font-heading text-xl text-foreground">{rosterQuery.data.summary.presentTodayCount}</p>
+                          </div>
+                          <div>
+                            <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Pending fees</p>
+                            <p className="font-heading text-xl text-foreground text-amber-700 dark:text-amber-400">
+                              {rosterQuery.data.summary.pendingFeesCount}
+                            </p>
+                          </div>
+                          <div className="flex flex-col gap-1 min-w-[10rem]">
+                            <label className="text-[10px] uppercase tracking-wide text-muted-foreground">Fee month</label>
+                            <input
+                              type="month"
+                              className="rounded-lg border border-input bg-background px-2 py-1.5 text-sm"
+                              value={feeYearMonth}
+                              onChange={(e) => setFeeYearMonth(e.target.value)}
+                            />
+                            <span className="text-[10px] text-muted-foreground">New month → all start as pending until you mark paid.</span>
+                          </div>
+                        </div>
+                        {rosterQuery.data.summary.pendingFeesCount > 0 ? (
+                          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-amber-500/35 bg-amber-500/10 px-3 py-3">
+                            <p className="text-sm font-body text-foreground">
+                              <span className="font-semibold">{rosterQuery.data.summary.pendingFeesCount}</span> student
+                              {rosterQuery.data.summary.pendingFeesCount === 1 ? "" : "s"} pending{" "}
+                              <span className="text-muted-foreground">({rosterQuery.data.course.monthlyFeeDisplay})</span>
+                            </p>
+                            <Button size="sm" className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white shrink-0" asChild>
+                              <a
+                                href={`https://wa.me/?text=${encodeURIComponent(
+                                  `Reminder: ${rosterQuery.data.course.monthlyFeeDisplay} for "${rosterQuery.data.course.title}" is still pending for ${rosterQuery.data.course.feeMonth}. Please pay when you can. Thank you!\n\n— ${user?.name ?? "Your instructor"}`,
+                                )}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <MessageCircle className="mr-1.5 h-4 w-4 inline" aria-hidden />
+                                Send reminder (WhatsApp)
+                              </a>
+                            </Button>
+                          </div>
+                        ) : null}
+                        <div className="relative">
+                          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" aria-hidden />
+                          <input
+                            type="search"
+                            className="w-full rounded-xl border border-input bg-background pl-9 pr-3 py-2 text-sm"
+                            placeholder="Search student by name, email, or phone"
+                            value={rosterSearch}
+                            onChange={(e) => setRosterSearch(e.target.value)}
+                          />
+                        </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-dashed border-accent/45 bg-accent/[0.07] p-4 sm:p-5 space-y-4">
+                        <div className="flex items-start gap-3">
+                          <UserPlus className="h-5 w-5 text-accent shrink-0 mt-0.5" aria-hidden />
+                          <div className="min-w-0">
+                            <p className="font-heading text-sm text-foreground">Bulk add</p>
+                            <p className="text-[11px] text-muted-foreground font-body mt-1 leading-relaxed">
+                              <span className="text-foreground font-medium">Emails or phones:</span> one per line — learner must already have an
+                              account with that email or linked phone. <span className="text-foreground font-medium">Names only:</span> use WhatsApp
+                              to send your invite link + checklist (they join when ready).
+                            </p>
+                          </div>
+                        </div>
+                        <div className="space-y-2">
+                          <label className="text-[11px] font-semibold text-foreground">Paste emails / phones</label>
+                          <textarea
+                            className="w-full min-h-[88px] rounded-xl border border-input bg-background p-3 text-sm font-body"
+                            placeholder={"student@gmail.com\n9876543210"}
+                            value={bulkEnrollInput}
+                            onChange={(e) => setBulkEnrollInput(e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-full"
+                            disabled={!rosterCourseSlug || bulkEnrollMut.isPending}
+                            onClick={() => bulkEnrollMut.mutate()}
+                          >
+                            {bulkEnrollMut.isPending ? (
+                              <Loader2 className="animate-spin h-4 w-4" aria-hidden />
+                            ) : (
+                              "Add to this class"
+                            )}
+                          </Button>
+                        </div>
+                        <div className="border-t border-border/40 pt-4 space-y-2">
+                          <label className="text-[11px] font-semibold text-foreground">Paste names (WhatsApp)</label>
+                          <textarea
+                            className="w-full min-h-[72px] rounded-xl border border-input bg-background p-3 text-sm font-body"
+                            placeholder={"Rahul\nAnanya\nKiran"}
+                            value={bulkNamesInput}
+                            onChange={(e) => setBulkNamesInput(e.target.value)}
+                          />
+                          <Button
+                            type="button"
+                            variant="secondary"
+                            size="sm"
+                            className="rounded-full"
+                            disabled={!inviteQuery.data}
+                            onClick={() => {
+                              const names = bulkNamesInput.split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean);
+                              if (!inviteQuery.data || names.length === 0) {
+                                toast.error("Enter names and wait for the invite link to load.");
+                                return;
+                              }
+                              const joinUrl =
+                                typeof window !== "undefined"
+                                  ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}`
+                                  : "";
+                              const title = rosterQuery.data?.course.title ?? "my class";
+                              const body = `Join "${title}" on Hobby of Interest:\n${joinUrl}\n\nIf your name is below, please sign up and join with the same name:\n${names.map((n, i) => `${i + 1}. ${n}`).join("\n")}`;
+                              window.open(`https://wa.me/?text=${encodeURIComponent(body)}`, "_blank", "noopener,noreferrer");
+                            }}
+                          >
+                            <MessageCircle className="mr-1.5 h-4 w-4 inline" aria-hidden />
+                            WhatsApp: invite + name list
+                          </Button>
+                        </div>
+                      </div>
+
+                      {filteredRosterStudents.length === 0 ? (
+                        <p className="text-sm text-muted-foreground font-body px-1">
+                          {rosterQuery.data.students.length === 0
+                            ? "No enrollments yet — share your invite link below."
+                            : "No students match your search."}
+                        </p>
+                      ) : (
+                        <ul className="space-y-2">
+                          {filteredRosterStudents.map((row) => (
+                            <li
+                              key={row.enrollmentId}
+                              className="rounded-xl border border-border/50 bg-background/80 px-3 py-3 sm:px-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3"
+                            >
+                              <div className="min-w-0">
+                                <p className="font-medium text-foreground font-body">{row.learner.name}</p>
+                                <p className="text-xs text-muted-foreground truncate">{row.learner.email}</p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  <span className="font-medium text-foreground">{rosterQuery.data.course.monthlyFeeDisplay}</span>
+                                  {row.feeStatus === "PAID" ? (
+                                    <span className="ml-2 text-emerald-600 dark:text-emerald-400">Paid</span>
+                                  ) : (
+                                    <span className="ml-2 text-amber-700 dark:text-amber-400">Pending</span>
+                                  )}
+                                </p>
+                                <p className="text-[11px] text-muted-foreground mt-1 font-body leading-snug">
+                                  {row.stats.sessionsHeld === 0
+                                    ? "No sessions logged yet — add a session below to track attendance."
+                                    : `Present ${row.stats.sessionsPresent}/${row.stats.sessionsHeld} logged sessions · Fees paid ${row.stats.feeRecentPaidCount}/${row.stats.feeRecentMonthCount} of last ${row.stats.feeRecentMonthCount} months`}
+                                </p>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={row.feeStatus === "PAID" ? "default" : "outline"}
+                                  className="rounded-full h-8 text-xs"
+                                  disabled={saveFeeOne.isPending}
+                                  onClick={() => {
+                                    if (row.feeStatus === "PAID") return;
+                                    saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PAID" });
+                                  }}
+                                >
+                                  Paid
+                                </Button>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant={row.feeStatus === "PENDING" ? "secondary" : "outline"}
+                                  className="rounded-full h-8 text-xs"
+                                  disabled={saveFeeOne.isPending}
+                                  onClick={() => {
+                                    if (row.feeStatus === "PENDING") return;
+                                    saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PENDING" });
+                                  }}
+                                >
+                                  Pending
+                                </Button>
+                                <Button variant="ghost" size="sm" className="rounded-full h-8 px-2 text-xs" asChild>
+                                  <a
+                                    href={`https://wa.me/?text=${encodeURIComponent(
+                                      `Hi ${row.learner.name.split(" ")[0] ?? ""}, quick note re ${rosterQuery.data.course.title}: ${rosterQuery.data.course.monthlyFeeDisplay} for ${rosterQuery.data.course.feeMonth} — let me know if you have questions. Thanks!`,
+                                    )}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                  >
+                                    <MessageCircle className="h-4 w-4" aria-hidden />
+                                  </a>
+                                </Button>
+                              </div>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+
+                    <div className="mt-8 rounded-2xl border border-accent/30 bg-accent/5 p-5 space-y-6">
+                      <div>
+                        <p className="text-xs font-semibold text-foreground uppercase tracking-wide font-body flex items-center gap-2">
+                          <Link2 size={14} className="text-accent" aria-hidden />
+                          Invite link
+                        </p>
+                        <p className="text-[11px] text-muted-foreground mt-1 font-body leading-relaxed">
+                          Learners open the link, sign in, and join. Works while the class is still a draft.
+                        </p>
+                        {inviteQuery.isLoading ? <Loader2 className="animate-spin mt-3 text-accent" size={18} /> : null}
+                        {inviteQuery.data ? (
+                          <div className="mt-3 flex flex-col gap-2">
+                            <code className="text-xs sm:text-sm font-mono bg-background/80 border border-border/50 rounded-lg px-3 py-2 break-all">
+                              {typeof window !== "undefined"
+                                ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}`
+                                : inviteQuery.data.inviteCode}
+                            </code>
+                            <div className="flex flex-wrap gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full"
+                                onClick={() => {
+                                  const url =
+                                    typeof window !== "undefined"
+                                      ? `${window.location.origin}/join/${inviteQuery.data!.inviteCode}`
+                                      : inviteQuery.data!.inviteCode;
+                                  void navigator.clipboard.writeText(url);
+                                  toast.success("Link copied");
+                                }}
+                              >
+                                Copy link
+                              </Button>
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full"
+                                disabled={regenerateInvite.isPending}
+                                onClick={() => regenerateInvite.mutate()}
+                              >
+                                {regenerateInvite.isPending ? (
+                                  <Loader2 className="animate-spin" size={14} />
+                                ) : (
+                                  <>
+                                    <RefreshCw size={14} className="mr-1 inline" aria-hidden /> New code
+                                  </>
+                                )}
+                              </Button>
+                              <Button
+                                asChild
+                                variant="outline"
+                                size="sm"
+                                className="rounded-full border-emerald-600/35 bg-emerald-500/[0.08] text-emerald-900 hover:bg-emerald-500/15 dark:text-emerald-100"
+                              >
+                                <a
+                                  href={`https://wa.me/?text=${encodeURIComponent(
+                                    `Join my class on Hobby of Interest:\n${
+                                      typeof window !== "undefined"
+                                        ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}`
+                                        : inviteQuery.data.inviteCode
+                                    }`,
+                                  )}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                >
+                                  WhatsApp
+                                </a>
+                              </Button>
+                            </div>
+                          </div>
+                        ) : null}
+                      </div>
+
+                      <div className="border-t border-border/40 pt-5 space-y-3">
+                        <p className="text-xs font-semibold text-foreground font-body">Sessions &amp; attendance</p>
+                        <p className="text-[11px] text-muted-foreground font-body">
+                          Tap Present or Absent, then save — or mark everyone present in one go.
+                        </p>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="secondary"
+                            className="rounded-full"
+                            disabled={createClassSessionNow.isPending || !rosterCourseSlug}
+                            onClick={() => createClassSessionNow.mutate()}
+                          >
+                            {createClassSessionNow.isPending ? (
+                              <Loader2 className="animate-spin" size={16} />
+                            ) : (
+                              <>
+                                <CalendarClock className="mr-1.5 h-4 w-4 inline" aria-hidden />
+                                Class happening now
+                              </>
+                            )}
+                          </Button>
+                          {sessionsToday[0] ? (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="outline"
+                              className="rounded-full"
+                              onClick={() => setSelectedSessionId(sessionsToday[0]!.id)}
+                            >
+                              Use today&apos;s session
+                            </Button>
+                          ) : null}
+                        </div>
+                        <div className="flex flex-col sm:flex-row gap-2 sm:items-end">
+                          <label className="flex flex-col gap-1 text-[11px] text-muted-foreground font-body flex-1 min-w-0">
+                            <span>Or add session at a specific time</span>
+                            <input
+                              type="datetime-local"
+                              className="rounded-xl border border-input bg-background px-2 py-2 text-sm"
+                              value={newSessionHeldAt}
+                              onChange={(e) => setNewSessionHeldAt(e.target.value)}
+                            />
+                          </label>
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="rounded-full shrink-0"
+                            disabled={createClassSession.isPending}
+                            onClick={() => createClassSession.mutate()}
+                          >
+                            {createClassSession.isPending ? <Loader2 className="animate-spin" size={16} /> : "Add session"}
+                          </Button>
+                        </div>
+                        {sessionsQuery.isLoading ? <Loader2 className="animate-spin text-accent" size={18} /> : null}
+                        <div className="flex flex-col gap-2">
+                          <label className="text-[11px] text-muted-foreground font-body">Mark attendance for</label>
+                          <select
+                            className="rounded-xl border border-input bg-background px-2 py-2 text-sm max-w-md"
+                            value={selectedSessionId}
+                            onChange={(e) => setSelectedSessionId(e.target.value)}
+                          >
+                            <option value="">Select a session</option>
+                            {(sessionsQuery.data?.sessions ?? []).map((s) => (
+                              <option key={s.id} value={s.id}>
+                                {new Date(s.heldAt).toLocaleString()} · present {s.presentCount}/{Math.max(s.totalMarked, 1)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {selectedSessionId && attendanceQuery.isLoading ? (
+                          <Loader2 className="animate-spin text-accent" size={18} />
+                        ) : null}
+                        {selectedSessionId && attendanceQuery.data ? (
+                          <div className="rounded-xl border border-border/50 p-3 space-y-3">
+                            {attendanceQuery.data.students.length === 0 ? (
+                              <p className="text-xs text-muted-foreground font-body">No students enrolled yet.</p>
+                            ) : (
+                              <>
+                                <div className="flex flex-wrap gap-2">
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-full h-8 text-xs"
+                                    onClick={() => {
+                                      const next: Record<string, boolean> = {};
+                                      for (const st of attendanceQuery.data!.students) next[st.enrollmentId] = true;
+                                      setAttendanceDraft(next);
+                                    }}
+                                  >
+                                    All present
+                                  </Button>
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="rounded-full h-8 text-xs"
+                                    onClick={() => {
+                                      const next: Record<string, boolean> = {};
+                                      for (const st of attendanceQuery.data!.students) next[st.enrollmentId] = false;
+                                      setAttendanceDraft(next);
+                                    }}
+                                  >
+                                    All absent
+                                  </Button>
+                                </div>
+                                <ul className="space-y-2">
+                                  {attendanceQuery.data.students.map((s) => (
+                                    <li
+                                      key={s.enrollmentId}
+                                      className="flex flex-wrap items-center justify-between gap-2 text-sm font-body"
+                                    >
+                                      <span className="text-foreground min-w-0">{s.name}</span>
+                                      <div className="flex rounded-full border border-border/60 p-0.5 bg-muted/30 shrink-0">
+                                        <button
+                                          type="button"
+                                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                                            (attendanceDraft[s.enrollmentId] ?? false)
+                                              ? "bg-emerald-600 text-white"
+                                              : "text-muted-foreground hover:text-foreground"
+                                          }`}
+                                          onClick={() =>
+                                            setAttendanceDraft((prev) => ({ ...prev, [s.enrollmentId]: true }))
+                                          }
+                                        >
+                                          Present
+                                        </button>
+                                        <button
+                                          type="button"
+                                          className={`rounded-full px-3 py-1 text-xs font-medium transition-colors ${
+                                            !(attendanceDraft[s.enrollmentId] ?? false)
+                                              ? "bg-foreground text-background"
+                                              : "text-muted-foreground hover:text-foreground"
+                                          }`}
+                                          onClick={() =>
+                                            setAttendanceDraft((prev) => ({ ...prev, [s.enrollmentId]: false }))
+                                          }
+                                        >
+                                          Absent
+                                        </button>
+                                      </div>
+                                    </li>
+                                  ))}
+                                </ul>
+                              </>
+                            )}
+                            <Button
+                              type="button"
+                              size="sm"
+                              className="rounded-full"
+                              disabled={saveAttendanceMvp.isPending || attendanceQuery.data.students.length === 0}
+                              onClick={() => saveAttendanceMvp.mutate()}
+                            >
+                              {saveAttendanceMvp.isPending ? <Loader2 className="animate-spin" size={16} /> : "Save attendance"}
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </div>
+                  </>
                 ) : !rosterCourseSlug ? (
                   <p className="mt-4 text-sm text-muted-foreground font-body">Create a class to see the roster.</p>
                 ) : null}
@@ -968,6 +2049,36 @@ const InstructorStudioPage = () => {
               <div className="mt-4 space-y-4">
                 <div className="rounded-xl border border-border/50 p-4 space-y-3">
                   <p className="text-xs font-medium text-foreground">New announcement</p>
+                  <p className="text-[11px] text-muted-foreground font-body">Quick templates — then post in-app and optionally blast WhatsApp.</p>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full h-8 text-xs"
+                      onClick={() => applyAnnouncePreset("update")}
+                    >
+                      Text update
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full h-8 text-xs"
+                      onClick={() => applyAnnouncePreset("cancel")}
+                    >
+                      Class cancelled
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full h-8 text-xs"
+                      onClick={() => applyAnnouncePreset("fee")}
+                    >
+                      Fee reminder
+                    </Button>
+                  </div>
                   <input
                     className="w-full rounded-xl border p-2.5 text-sm"
                     placeholder="Title (optional)"
@@ -989,15 +2100,27 @@ const InstructorStudioPage = () => {
                     />
                     Email enrolled learners (requires SMTP in server .env)
                   </label>
-                  <Button
-                    type="button"
-                    size="sm"
-                    className="rounded-full"
-                    disabled={postAnnouncement.isPending || announceBody.trim().length < 10}
-                    onClick={() => postAnnouncement.mutate()}
-                  >
-                    Post announcement
-                  </Button>
+                  <div className="flex flex-wrap gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-full"
+                      disabled={postAnnouncement.isPending || announceBody.trim().length < 10}
+                      onClick={() => postAnnouncement.mutate()}
+                    >
+                      Post in Classroom only
+                    </Button>
+                    <Button
+                      type="button"
+                      size="sm"
+                      className="rounded-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                      disabled={announceBody.trim().length < 10}
+                      onClick={() => void postAnnouncementShareWhatsApp()}
+                    >
+                      <MessageCircle className="mr-1.5 h-4 w-4 inline" aria-hidden />
+                      Post + share on WhatsApp
+                    </Button>
+                  </div>
                 </div>
                 {studioAnnouncementsQuery.isLoading ? <Loader2 size={20} className="animate-spin text-accent" /> : null}
                 <ul className="space-y-3">
@@ -1186,6 +2309,13 @@ const InstructorStudioPage = () => {
                 {payoutSummaryQuery.isLoading ? <Loader2 size={22} className="animate-spin text-accent" /> : null}
                 {payoutSummaryQuery.data ? (
                   <>
+                    <div className="rounded-xl border border-border/60 bg-muted/30 px-4 py-3">
+                      <p className="text-xs font-semibold text-foreground font-body">Manual payouts — no Razorpay</p>
+                      <p className="text-[11px] text-muted-foreground font-body mt-1 leading-relaxed">
+                        Money does not move inside this app. Use this tab to record what you’re owed and what an admin has marked paid after
+                        UPI/bank transfer offline.
+                      </p>
+                    </div>
                     <p className="text-[11px] text-muted-foreground font-body leading-relaxed">{payoutSummaryQuery.data.demoNote}</p>
                     <div className="grid sm:grid-cols-2 gap-3">
                       <div className="rounded-xl border border-border/50 p-3 text-sm">
@@ -1234,7 +2364,7 @@ const InstructorStudioPage = () => {
                       </Button>
                     </div>
                     <div className="rounded-xl border border-border/50 p-4 space-y-2">
-                      <p className="text-xs font-medium text-foreground">Request payout</p>
+                      <p className="text-xs font-medium text-foreground">Record payout request (manual)</p>
                       <p className="text-xs text-muted-foreground font-body">
                         Max whole rupees: {Math.max(0, Math.floor(payoutSummaryQuery.data.availablePaise / 100))}
                       </p>
@@ -1263,7 +2393,7 @@ const InstructorStudioPage = () => {
                         }
                         onClick={() => requestPayout.mutate()}
                       >
-                        Submit payout request
+                        Submit request (ledger only)
                       </Button>
                     </div>
                     <div>
@@ -1296,7 +2426,7 @@ const InstructorStudioPage = () => {
             ) : null}
           </div>
 
-          <div id="studio-create-class" className="mt-6 scroll-mt-28 rounded-2xl border border-border/60 bg-card/50 p-6">
+          <div id="studio-create-class" className={`scroll-mt-28 rounded-2xl border border-border/60 bg-card/50 p-6${mvpFocus ? " order-1 mt-8" : " mt-6"}`}>
             <h2 className="font-heading text-xl">Create new class</h2>
             <p className="text-xs text-muted-foreground mt-1 font-body">Starts as a draft until you publish from the class card below.</p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
@@ -1354,7 +2484,15 @@ const InstructorStudioPage = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8 max-w-2xl">
+          <div
+            id="studio-classes"
+            className={`scroll-mt-28 grid grid-cols-1 md:grid-cols-2 gap-4 max-w-2xl mt-8${mvpFocus ? " order-5 rounded-2xl border border-dashed border-border/50 p-4 bg-muted/10" : ""}`}
+          >
+            {mvpFocus ? (
+              <p className="md:col-span-2 text-xs text-muted-foreground font-body leading-relaxed -mt-2 mb-2">
+                Optional for launch: sections, lesson titles, and video URLs. You can run live classes with invite + attendance only.
+              </p>
+            ) : null}
             <select className="rounded-xl border p-2.5" value={selectedCourseSlug} onChange={(e) => setSelectedCourseSlug(e.target.value)}>
               <option value="">Select course</option>
               {courses.map((c) => (
@@ -1381,7 +2519,7 @@ const InstructorStudioPage = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 max-w-3xl">
+          <div className={"grid grid-cols-1 md:grid-cols-3 gap-4 mt-4 max-w-3xl" + (mvpFocus ? " order-5" : "")}>
             <select className="rounded-xl border p-2.5" value={selectedSectionId} onChange={(e) => setSelectedSectionId(e.target.value)}>
               <option value="">Select section</option>
               {sectionOptions.map((s) => (
@@ -1404,7 +2542,7 @@ const InstructorStudioPage = () => {
             </div>
           </div>
 
-          <div className="mt-10 space-y-4">
+          <div className={"mt-10 space-y-4" + (mvpFocus ? " order-5" : "")}>
             {courses.map((course) => (
               <div key={course.id} className="rounded-2xl border p-4">
                 <div className="flex items-center justify-between gap-3">
@@ -1761,7 +2899,7 @@ const InstructorStudioPage = () => {
               </div>
             )}
           </div>
-        </>
+        </div>
       )}
     </main>
   );

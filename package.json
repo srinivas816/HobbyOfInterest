@@ -11,7 +11,8 @@
     "lint": "eslint .",
     "preview": "vite preview",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "funnel-report": "node scripts/funnel-report.mjs"
   },
   "dependencies": {
     "@hookform/resolvers": "^3.10.0",

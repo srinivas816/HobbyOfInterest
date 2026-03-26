@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Sparkles, Star } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 import ScrollReveal from "./ScrollReveal";
 import heroPottery from "@/assets/hero-pottery.jpg";
 import heroPainting from "@/assets/hero-painting.jpg";
@@ -26,6 +27,7 @@ const HeroSection = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const navigate = useNavigate();
   const { user } = useAuth();
+  const mvp = mvpInstructorFocus();
 
   const goSearch = () => {
     const q = searchQuery.trim();
@@ -48,63 +50,103 @@ const HeroSection = () => {
                 </span>
               </div>
               <h1 className="font-heading text-5xl sm:text-6xl md:text-7xl lg:text-[5.4rem] font-light leading-[0.92] tracking-tight text-foreground mt-6">
-                Learn any hobby, anywhere — online or in&#8209;person<span className="text-accent">.</span>
+                {mvp && !user ? (
+                  <>
+                    Run your hobby class — invites, attendance, fees<span className="text-accent">.</span>
+                  </>
+                ) : (
+                  <>
+                    Learn any hobby, anywhere — online or in&#8209;person<span className="text-accent">.</span>
+                  </>
+                )}
               </h1>
             </ScrollReveal>
 
             <ScrollReveal direction="up" delay={0.15}>
               <p className="font-body text-base sm:text-lg text-muted-foreground mt-6 max-w-xl leading-relaxed">
-                Discover weekend workshops, evening batches, live online classes, and self-paced courses across pottery, art, baking, music, dance, photography, and more.
+                {mvp && !user ? (
+                  <>
+                    One place for tutors: create a batch, share a join link or WhatsApp it to parents, mark who showed up, and track monthly
+                    fees. Students join with your invite — no marketplace hunt required.
+                  </>
+                ) : (
+                  <>
+                    Discover weekend workshops, evening batches, live online classes, and self-paced courses across pottery, art, baking, music,
+                    dance, photography, and more.
+                  </>
+                )}
               </p>
             </ScrollReveal>
 
             <ScrollReveal direction="up" delay={0.25}>
-              <div className="mt-8 flex overflow-hidden rounded-2xl shadow-xl bg-background border border-border/40">
-                <input
-                  type="text"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && goSearch()}
-                  placeholder="Search pottery classes, online baking, guitar lessons..."
-                  className="flex-1 min-w-0 px-4 sm:px-6 py-4 sm:py-5 font-body text-sm bg-transparent text-foreground placeholder:text-muted-foreground outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={goSearch}
-                  className="bg-accent text-accent-foreground px-6 sm:px-8 py-4 sm:py-5 font-heading text-base sm:text-lg font-semibold hover:brightness-110 transition-all duration-300 flex-shrink-0"
-                >
-                  Explore
-                </button>
-              </div>
+              {mvp && !user ? (
+                <div className="mt-8 flex flex-col sm:flex-row flex-wrap gap-3">
+                  <Link
+                    to={`/login?mode=register&role=instructor&next=${encodeURIComponent(
+                      "/instructor/studio?setup=1#studio-create-class",
+                    )}`}
+                    className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background px-6 py-3.5 text-sm font-medium hover:opacity-90 transition-opacity text-center"
+                  >
+                    <Sparkles size={16} />
+                    Create your class — start free
+                  </Link>
+                  <Link
+                    to="/login?next=/learn"
+                    className="inline-flex items-center justify-center rounded-full border border-border/70 px-6 py-3.5 text-sm text-foreground hover:bg-muted/40 transition-colors text-center"
+                  >
+                    I’m a student — log in
+                  </Link>
+                </div>
+              ) : (
+                <div className="mt-8 flex overflow-hidden rounded-2xl shadow-xl bg-background border border-border/40">
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && goSearch()}
+                    placeholder="Search pottery classes, online baking, guitar lessons..."
+                    className="flex-1 min-w-0 px-4 sm:px-6 py-4 sm:py-5 font-body text-sm bg-transparent text-foreground placeholder:text-muted-foreground outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={goSearch}
+                    className="bg-accent text-accent-foreground px-6 sm:px-8 py-4 sm:py-5 font-heading text-base sm:text-lg font-semibold hover:brightness-110 transition-all duration-300 flex-shrink-0"
+                  >
+                    Explore
+                  </button>
+                </div>
+              )}
               {user?.role === "INSTRUCTOR" ? (
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <Link
-                    to="/instructor/studio"
+                    to={mvp ? "/instructor/studio?setup=1#studio-create-class" : "/instructor/studio"}
                     className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
                   >
                     <Sparkles size={16} />
-                    Create a class in Studio
+                    {mvp ? "Studio — class & invites" : "Create a class in Studio"}
                   </Link>
                   <span className="font-body text-xs text-muted-foreground max-w-xs">
-                    Your teaching home — new sessions, lessons, and publish flow.
+                    {mvp ? "Invite link and WhatsApp live under Teaching tools → Roster." : "Your teaching home — new sessions, lessons, and publish flow."}
                   </span>
                 </div>
               ) : null}
-              <div className="flex flex-wrap gap-2 mt-4">
-                {trendingSearches.map((item) => (
-                  <button
-                    key={item}
-                    onClick={() => setSearchQuery(item)}
-                    className="rounded-full border border-border bg-background/70 px-3 py-2 font-body text-xs text-muted-foreground transition-colors hover:text-foreground hover:border-foreground/40"
-                  >
-                    {item}
-                  </button>
-                ))}
-              </div>
+              {!mvp ? (
+                <div className="flex flex-wrap gap-2 mt-4">
+                  {trendingSearches.map((item) => (
+                    <button
+                      key={item}
+                      onClick={() => setSearchQuery(item)}
+                      className="rounded-full border border-border bg-background/70 px-3 py-2 font-body text-xs text-muted-foreground transition-colors hover:text-foreground hover:border-foreground/40"
+                    >
+                      {item}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
             </ScrollReveal>
 
             <ScrollReveal direction="up" delay={0.35}>
-              <div className="grid grid-cols-3 gap-3 mt-8 max-w-xl">
+              <div className={`grid grid-cols-3 gap-3 mt-8 max-w-xl${mvp && !user ? " hidden lg:grid" : ""}`}>
                 {[
                   ["500+", "Classes available"],
                   ["50+ Cities", "& fully online"],

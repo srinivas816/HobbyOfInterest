@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { Menu, X } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useAuth } from "@/context/AuthContext";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 
 const navLinks = [
   { label: "How It Works", href: "#how-it-works" },
@@ -21,6 +22,14 @@ const Navbar = () => {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
+  const mvp = mvpInstructorFocus();
+  const navLinksEffective = useMemo(
+    () =>
+      mvp && user?.role === "INSTRUCTOR"
+        ? navLinks.filter((l) => l.href !== "/courses" && l.href !== "#categories")
+        : navLinks,
+    [mvp, user?.role],
+  );
   const onboardingNext = user?.role === "INSTRUCTOR" ? "/instructor/studio" : "/learn";
   const onboardingHref = `/onboarding?next=${encodeURIComponent(onboardingNext)}`;
   const needsOnboarding = Boolean(user && !user.onboardingCompletedAt);
@@ -28,7 +37,7 @@ const Navbar = () => {
   useEffect(() => {
     const handleScroll = () => {
       setScrolled(window.scrollY > 20);
-      const sections = navLinks.filter((l) => l.href.startsWith("#")).map((l) => l.href.slice(1));
+      const sections = navLinksEffective.filter((l) => l.href.startsWith("#")).map((l) => l.href.slice(1));
       for (let i = sections.length - 1; i >= 0; i--) {
         const el = document.getElementById(sections[i]);
         if (el && el.getBoundingClientRect().top <= 150) {
@@ -40,7 +49,7 @@ const Navbar = () => {
     };
     window.addEventListener("scroll", handleScroll, { passive: true });
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [navLinksEffective]);
 
   const handleNavClick = (href: string) => {
     setMobileOpen(false);
@@ -82,7 +91,7 @@ const Navbar = () => {
         </div>
 
         <div className="hidden lg:flex items-center gap-6">
-          {navLinks.map((link) => {
+          {navLinksEffective.map((link) => {
             const isHash = link.href.startsWith("#");
             const active = isHash ? activeSection === link.href.slice(1) : location.pathname === link.href;
             return (
@@ -113,11 +122,11 @@ const Navbar = () => {
               )}
               {user.role === "INSTRUCTOR" && (
                 <Link
-                  to="/instructor/studio"
+                  to={mvp ? "/instructor/studio?setup=1#studio-create-class" : "/instructor/studio"}
                   className="font-body text-sm font-medium text-foreground hover:text-accent transition-colors px-4 py-2 rounded-full border border-accent/40 bg-accent/10 hover:bg-accent/15"
                   title="Manage classes you teach"
                 >
-                  Teaching studio
+                  {mvp ? "My classes & students" : "Teaching studio"}
                 </Link>
               )}
               <Link
@@ -125,11 +134,13 @@ const Navbar = () => {
                 className="font-body text-sm text-foreground hover:text-accent transition-colors px-4 py-2"
                 title={user.role === "INSTRUCTOR" ? "Classes you’re taking as a learner" : undefined}
               >
-                My learning
+                {mvp ? "My classes" : "My learning"}
               </Link>
-              <Link to="/wishlist" className="font-body text-sm text-foreground hover:text-accent transition-colors px-4 py-2">
-                Wishlist
-              </Link>
+              {!(mvp && user.role === "INSTRUCTOR") ? (
+                <Link to="/wishlist" className="font-body text-sm text-foreground hover:text-accent transition-colors px-4 py-2">
+                  Wishlist
+                </Link>
+              ) : null}
               <Link to="/settings" className="font-body text-sm text-foreground hover:text-accent transition-colors px-4 py-2">
                 Account
               </Link>
@@ -174,7 +185,7 @@ const Navbar = () => {
             transition={{ duration: 0.3 }}
             className="lg:hidden border-t border-border/20 bg-background px-6 py-4 space-y-1 overflow-hidden"
           >
-            {navLinks.map((link) => {
+            {navLinksEffective.map((link) => {
               const isHash = link.href.startsWith("#");
               const active = isHash ? activeSection === link.href.slice(1) : location.pathname === link.href;
               return (
@@ -204,19 +215,21 @@ const Navbar = () => {
                   )}
                   {user.role === "INSTRUCTOR" && (
                     <Link
-                      to="/instructor/studio"
+                      to={mvp ? "/instructor/studio?setup=1#studio-create-class" : "/instructor/studio"}
                       className="font-body text-sm font-medium text-foreground py-2"
                       onClick={() => setMobileOpen(false)}
                     >
-                      Teaching studio
+                      {mvp ? "My classes & students" : "Teaching studio"}
                     </Link>
                   )}
                   <Link to="/learn" className="font-body text-sm text-foreground py-2" onClick={() => setMobileOpen(false)}>
-                    My learning
+                    {mvp ? "My classes" : "My learning"}
                   </Link>
-                  <Link to="/wishlist" className="font-body text-sm text-foreground py-2" onClick={() => setMobileOpen(false)}>
-                    Wishlist
-                  </Link>
+                  {!(mvp && user.role === "INSTRUCTOR") ? (
+                    <Link to="/wishlist" className="font-body text-sm text-foreground py-2" onClick={() => setMobileOpen(false)}>
+                      Wishlist
+                    </Link>
+                  ) : null}
                   <Link to="/settings" className="font-body text-sm text-foreground py-2" onClick={() => setMobileOpen(false)}>
                     Account
                   </Link>
