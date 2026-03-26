@@ -314,6 +314,7 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
         label: string | null;
         studentCount: number;
       }>,
+      classInsights: [] as Array<{ courseSlug: string; totalStudents: number; pendingFeesCount: number }>,
     });
     return;
   }
@@ -365,6 +366,7 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
     where: { course: { instructorId: req.userId! } },
     select: {
       id: true,
+      course: { select: { slug: true } },
       feePeriods: {
         where: { yearMonth: ym },
         select: { status: true },
@@ -375,6 +377,20 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
   const pendingFeesCount = allEnrollmentsThisMonth.filter(
     (e) => (e.feePeriods[0]?.status ?? "PENDING") === "PENDING",
   ).length;
+
+  const insightBySlug = new Map<string, { totalStudents: number; pendingFeesCount: number }>();
+  for (const e of allEnrollmentsThisMonth) {
+    const slug = e.course.slug;
+    const cur = insightBySlug.get(slug) ?? { totalStudents: 0, pendingFeesCount: 0 };
+    cur.totalStudents += 1;
+    if ((e.feePeriods[0]?.status ?? "PENDING") === "PENDING") cur.pendingFeesCount += 1;
+    insightBySlug.set(slug, cur);
+  }
+  const classInsights = [...insightBySlug.entries()].map(([courseSlug, v]) => ({
+    courseSlug,
+    totalStudents: v.totalStudents,
+    pendingFeesCount: v.pendingFeesCount,
+  }));
 
   const alerts: Array<{ id: string; kind: string; message: string; severity: "info" | "warning" }> = [];
   if (pendingFeesCount > 0) {
@@ -402,6 +418,7 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
     feeMonth: ym,
     alerts,
     scheduleToday,
+    classInsights,
   });
 });
 

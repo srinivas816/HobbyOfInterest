@@ -42,11 +42,11 @@ const PostAuthBanner = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Link
-              to={mvp ? "/instructor/studio?setup=1#studio-teaching-tools" : "/instructor/studio"}
+              to={mvp ? "/instructor/classes" : "/instructor/studio"}
               className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Sparkles size={16} />
-              {mvp ? "Invite students" : "Open Studio — create a class"}
+              {mvp ? "Your classes" : "Open Studio — create a class"}
             </Link>
             {!mvp ? (
               <Link
@@ -57,7 +57,7 @@ const PostAuthBanner = () => {
               </Link>
             ) : (
               <Link
-                to="/instructor/studio?setup=1#studio-create-class"
+                to={mvp ? "/instructor/classes" : "/instructor/studio?setup=1#studio-create-class"}
                 className="inline-flex items-center justify-center rounded-full border border-border/70 px-4 py-2.5 text-sm text-foreground hover:bg-muted/40 transition-colors"
               >
                 New class

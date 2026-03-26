@@ -44,14 +44,14 @@ const InstructorClassReadyPage = () => {
     );
   }
   if (!token || !user || user.role !== "INSTRUCTOR") {
-    return <Navigate to="/login?next=/instructor/studio" replace />;
+    return <Navigate to="/login?next=/instructor/home" replace />;
   }
   if (!slug) {
-    return <Navigate to="/instructor/studio" replace />;
+    return <Navigate to="/instructor/home" replace />;
   }
 
   if (coursesQuery.isSuccess && !course) {
-    return <Navigate to="/instructor/studio" replace />;
+    return <Navigate to="/instructor/home" replace />;
   }
 
   const inviteUrl =
@@ -59,7 +59,7 @@ const InstructorClassReadyPage = () => {
       ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}`
       : "";
 
-  const studioHref = `/instructor/studio?setup=1&class=${encodeURIComponent(slug)}&focusInvite=1&tool=roster#studio-teaching-tools`;
+  const studioHref = `/instructor/class/${encodeURIComponent(slug)}`;
 
   return (
     <main className="container mx-auto py-12 md:py-20 max-w-lg px-4">

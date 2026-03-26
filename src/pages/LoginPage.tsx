@@ -50,7 +50,7 @@ const LoginPage = () => {
         return;
       }
       const learnerDefault = next === "/learn" || next.startsWith("/learn?") || next.includes("/onboarding");
-      navigate(learnerDefault ? "/instructor/studio" : next, { replace: true });
+      navigate(learnerDefault ? (mvp ? "/instructor/home" : "/instructor/studio") : next, { replace: true });
       return;
     }
 

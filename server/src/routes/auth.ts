@@ -144,6 +144,7 @@ router.post("/otp/request", async (req, res) => {
   if (shouldExposeDemoOtp()) {
     console.info(`[otp] ${normalized} → ${code} (demo OTP on screen)`);
   }
+  funnelLog("otp_sent", null, { demoMode: shouldExposeDemoOtp() });
   const expose = shouldExposeDemoOtp();
   res.json({
     ok: true,
@@ -226,6 +227,7 @@ router.post("/otp/verify", async (req, res) => {
   }
 
   const token = signToken(user.id);
+  funnelLog("otp_verified", user.id, { isNewUser });
   res.json({ token, user: publicUser(user), meta: { isNewUser } });
 });
 

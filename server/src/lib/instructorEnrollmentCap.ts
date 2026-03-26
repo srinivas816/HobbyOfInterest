@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma.js";
 
 function capEnforced(): boolean {
@@ -45,6 +46,45 @@ export async function assertInstructorCanAddLearner(
   if (already) return { ok: true };
 
   const grouped = await prisma.enrollment.groupBy({
+    by: ["userId"],
+    where: { course: { instructorId } },
+  });
+  const cap = freeLearnerCap();
+  if (grouped.length >= cap) {
+    return {
+      ok: false,
+      message: `This class can’t accept new students right now — the instructor’s free plan is full (${cap} students). Ask them to upgrade or remove old enrollments.`,
+    };
+  }
+  return { ok: true };
+}
+
+/**
+ * Same rules as {@link assertInstructorCanAddLearner}, but uses a transaction client so it runs
+ * after `SELECT … FOR UPDATE` on the instructor row (see join-invite enrollment flow).
+ */
+export async function assertInstructorCanAddLearnerTx(
+  tx: Prisma.TransactionClient,
+  instructorId: string,
+  learnerUserId: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  if (!capEnforced()) return { ok: true };
+
+  const instructor = await tx.user.findUnique({
+    where: { id: instructorId },
+    select: { role: true, planTier: true, createdAt: true },
+  });
+  if (!instructor || instructor.role !== "INSTRUCTOR") return { ok: true };
+
+  if (instructor.planTier !== "EXPLORER") return { ok: true };
+  if (isWithinTrial(instructor.createdAt)) return { ok: true };
+
+  const already = await tx.enrollment.findFirst({
+    where: { userId: learnerUserId, course: { instructorId } },
+  });
+  if (already) return { ok: true };
+
+  const grouped = await tx.enrollment.groupBy({
     by: ["userId"],
     where: { course: { instructorId } },
   });

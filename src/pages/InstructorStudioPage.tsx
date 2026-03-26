@@ -1212,7 +1212,7 @@ const InstructorStudioPage = () => {
               <p className="text-sm font-body text-foreground flex-1 min-w-0">{a.message}</p>
               <div className="flex flex-wrap gap-2 shrink-0">
                 <Button variant="outline" size="sm" className="rounded-full" asChild>
-                  <Link to="/instructor/studio?tool=roster#studio-teaching-tools">Open roster</Link>
+                  <Link to={mvpFocus ? "/instructor/classes" : "/instructor/studio?tool=roster#studio-teaching-tools"}>Open roster</Link>
                 </Button>
                 <Button
                   type="button"
@@ -1260,7 +1260,7 @@ const InstructorStudioPage = () => {
             </p>
           </div>
           <Button variant="secondary" className="rounded-full shrink-0" asChild>
-            <Link to="/instructor/studio?tool=roster#studio-teaching-tools">Open invite</Link>
+            <Link to={mvpFocus ? "/instructor/classes" : "/instructor/studio?tool=roster#studio-teaching-tools"}>Open invite</Link>
           </Button>
         </div>
       ) : null}

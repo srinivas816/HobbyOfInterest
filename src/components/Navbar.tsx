@@ -30,7 +30,8 @@ const Navbar = () => {
         : navLinks,
     [mvp, user?.role],
   );
-  const onboardingNext = user?.role === "INSTRUCTOR" ? "/instructor/studio" : "/learn";
+  const onboardingNext =
+    user?.role === "INSTRUCTOR" ? (mvp ? "/instructor/home" : "/instructor/studio") : "/learn";
   const onboardingHref = `/onboarding?next=${encodeURIComponent(onboardingNext)}`;
   const needsOnboarding = Boolean(user && !user.onboardingCompletedAt);
 
@@ -122,7 +123,7 @@ const Navbar = () => {
               )}
               {user.role === "INSTRUCTOR" && (
                 <Link
-                  to={mvp ? "/instructor/studio?setup=1#studio-create-class" : "/instructor/studio"}
+                  to={mvp ? "/instructor/home" : "/instructor/studio"}
                   className="font-body text-sm font-medium text-foreground hover:text-accent transition-colors px-4 py-2 rounded-full border border-accent/40 bg-accent/10 hover:bg-accent/15"
                   title="Manage classes you teach"
                 >
@@ -215,7 +216,7 @@ const Navbar = () => {
                   )}
                   {user.role === "INSTRUCTOR" && (
                     <Link
-                      to={mvp ? "/instructor/studio?setup=1#studio-create-class" : "/instructor/studio"}
+                      to={mvp ? "/instructor/home" : "/instructor/studio"}
                       className="font-body text-sm font-medium text-foreground py-2"
                       onClick={() => setMobileOpen(false)}
                     >

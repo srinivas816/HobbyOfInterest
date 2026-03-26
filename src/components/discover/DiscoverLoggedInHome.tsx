@@ -17,6 +17,7 @@ import { useAuth } from "@/context/AuthContext";
 import { apiFetch, parseJson } from "@/lib/api";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { mvpInstructorFocus } from "@/lib/productFocus";
 
 type EnrollmentRow = {
   id: string;
@@ -42,8 +43,8 @@ type SubscriptionSummary = {
   checkoutLive?: boolean;
 };
 
-const ROSTER = "/instructor/studio?tool=roster#studio-teaching-tools";
-const ANNOUNCE = "/instructor/studio?tool=announce#studio-teaching-tools";
+const ROSTER_LEGACY = "/instructor/studio?tool=roster#studio-teaching-tools";
+const ANNOUNCE_LEGACY = "/instructor/studio?tool=announce#studio-teaching-tools";
 const PLAN_UPGRADE = "/settings#instructor-plan";
 
 /**
@@ -78,6 +79,7 @@ type DashboardToday = {
 
 function InstructorLoggedInPanel() {
   const { token } = useAuth();
+  const mvp = mvpInstructorFocus();
   const sub = useQuery({
     queryKey: ["instructor-subscription-summary"],
     enabled: Boolean(token),
@@ -104,6 +106,18 @@ function InstructorLoggedInPanel() {
     !sub.data.trialActive &&
     !sub.data.capReached &&
     sub.data.distinctLearnerCount >= sub.data.freeLearnerCap - 2;
+
+  const firstSlug = dash.data?.scheduleToday?.[0]?.courseSlug;
+  const ROSTER = mvp
+    ? firstSlug
+      ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=attendance`
+      : "/instructor/classes"
+    : ROSTER_LEGACY;
+  const ANNOUNCE = mvp
+    ? firstSlug
+      ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=announce`
+      : "/instructor/classes"
+    : ANNOUNCE_LEGACY;
 
   return (
     <section className="border-b border-border/40 bg-gradient-to-b from-accent/14 via-card/50 to-background">
@@ -340,10 +354,30 @@ function InstructorLoggedInPanel() {
         <div>
           <p className="font-body text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Studio</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            <QuickAction to="/instructor/studio" icon={LayoutDashboard} label="Dashboard" sub="Studio home" />
-            <QuickAction to={ROSTER} icon={Users} label="Students" sub="Roster & invites" />
-            <QuickAction to={ROSTER} icon={IndianRupee} label="Payments" sub="Monthly fees" />
-            <QuickAction to="/instructor/studio#studio-create-class" icon={Sparkles} label="Classes" sub="Create & edit" />
+            <QuickAction
+              to={mvp ? "/instructor/home" : "/instructor/studio"}
+              icon={LayoutDashboard}
+              label="Dashboard"
+              sub={mvp ? "Today" : "Studio home"}
+            />
+            <QuickAction
+              to={mvp ? (firstSlug ? `/instructor/class/${encodeURIComponent(firstSlug)}` : "/instructor/classes") : ROSTER_LEGACY}
+              icon={Users}
+              label="Students"
+              sub="Roster & invites"
+            />
+            <QuickAction
+              to={mvp ? (firstSlug ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=fees` : "/instructor/classes") : ROSTER_LEGACY}
+              icon={IndianRupee}
+              label="Payments"
+              sub="Monthly fees"
+            />
+            <QuickAction
+              to={mvp ? "/instructor/classes" : "/instructor/studio#studio-create-class"}
+              icon={Sparkles}
+              label="Classes"
+              sub="Create & edit"
+            />
           </div>
         </div>
       </div>

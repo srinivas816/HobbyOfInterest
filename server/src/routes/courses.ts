@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { formatInrFromPaise } from "../lib/inr.js";
+import { funnelLog } from "../lib/funnel.js";
 import { CourseFormat, type Prisma } from "@prisma/client";
 import { pathParam } from "../lib/httpParams.js";
 import { authRequired, optionalAuth, type AuthedRequest } from "../middleware/auth.js";
@@ -175,8 +176,8 @@ router.get("/", async (req, res) => {
   }
 });
 
-/** Public preview for invite link (no auth). */
-router.get("/by-invite/:code", async (req, res) => {
+/** Invite preview — public; optional Bearer adds `alreadyEnrolled` for re-entry UX. */
+router.get("/by-invite/:code", optionalAuth, async (req: AuthedRequest, res) => {
   const raw = pathParam(req.params.code)?.trim().toUpperCase();
   if (!raw || raw.length < 4) {
     res.status(400).json({ error: "Invalid invite code" });
@@ -184,12 +185,44 @@ router.get("/by-invite/:code", async (req, res) => {
   }
   const course = await prisma.course.findFirst({
     where: { inviteCode: raw },
-    include: { instructor: { select: { name: true } } },
+    include: { instructor: { select: { id: true, name: true } } },
   });
   if (!course) {
     res.status(404).json({ error: "Class not found" });
     return;
   }
+
+  const now = new Date();
+  const [studentCount, instructorCourseCount, upcomingSession, enrollmentRow] = await Promise.all([
+    prisma.enrollment.count({ where: { courseId: course.id } }),
+    prisma.course.count({ where: { instructorId: course.instructorId } }),
+    prisma.classSession.findFirst({
+      where: { courseId: course.id, heldAt: { gte: now } },
+      orderBy: { heldAt: "asc" },
+    }),
+    req.userId
+      ? prisma.enrollment.findFirst({
+          where: { userId: req.userId, courseId: course.id },
+          select: { id: true },
+        })
+      : Promise.resolve(null),
+  ]);
+
+  const nextSessionLabel = upcomingSession
+    ? new Date(upcomingSession.heldAt).toLocaleString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+        hour: "numeric",
+        minute: "2-digit",
+      })
+    : null;
+
+  funnelLog("invite_preview_opened", req.userId ?? null, {
+    courseSlug: course.slug,
+    alreadyEnrolled: Boolean(enrollmentRow),
+  });
+
   res.json({
     slug: course.slug,
     title: course.title,
@@ -200,6 +233,10 @@ router.get("/by-invite/:code", async (req, res) => {
     priceDisplay: formatInrFromPaise(course.priceCents),
     instructorName: course.instructor.name,
     published: course.published,
+    studentCount,
+    instructorCourseCount,
+    nextSessionLabel,
+    alreadyEnrolled: Boolean(enrollmentRow),
   });
 });
 
