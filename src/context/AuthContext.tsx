@@ -10,6 +10,8 @@ export type AuthUser = {
   specialty: string | null;
   phone: string | null;
   onboardingCompletedAt: string | null;
+  /** false until user completes Learn vs Teach (phone signup) or join-invite */
+  intentChosen: boolean;
 };
 
 export type AuthOutcome = { user: AuthUser; isNewUser: boolean };
@@ -20,7 +22,7 @@ type AuthContextValue = {
   ready: boolean;
   login: (email: string, password: string) => Promise<AuthOutcome>;
   register: (email: string, password: string, name: string, role?: "LEARNER" | "INSTRUCTOR") => Promise<AuthOutcome>;
-  requestOtp: (phone: string) => Promise<{ ok: boolean; demoOtp?: string; demoOtpHint?: string }>;
+  requestOtp: (phone: string) => Promise<{ ok: boolean; demoOtp?: string }>;
   verifyOtp: (
     phone: string,
     code: string,
@@ -55,6 +57,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             ...data.user,
             phone: data.user.phone ?? null,
             onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+            intentChosen: data.user.intentChosen !== false,
           });
       } catch {
         if (!cancelled) {
@@ -83,6 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...data.user,
       phone: data.user.phone ?? null,
       onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+      intentChosen: data.user.intentChosen !== false,
     };
     setUser(u);
     return { user: u, isNewUser: data.meta?.isNewUser ?? false };
@@ -100,6 +104,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...data.user,
       phone: data.user.phone ?? null,
       onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+      intentChosen: data.user.intentChosen !== false,
     };
     setUser(u);
     return { user: u, isNewUser: data.meta?.isNewUser ?? true };
@@ -110,7 +115,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: "POST",
       body: JSON.stringify({ phone }),
     });
-    return parseJson<{ ok: boolean; demoOtp?: string; demoOtpHint?: string }>(res);
+    return parseJson<{ ok: boolean; demoOtp?: string }>(res);
   }, []);
 
   const verifyOtp = useCallback(async (phone: string, code: string, name?: string, role?: "LEARNER" | "INSTRUCTOR") => {
@@ -130,6 +135,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...data.user,
       phone: data.user.phone ?? null,
       onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+      intentChosen: data.user.intentChosen !== false,
     };
     setUser(u);
     return { user: u, isNewUser: data.meta?.isNewUser ?? false };
@@ -144,6 +150,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       ...data.user,
       phone: data.user.phone ?? null,
       onboardingCompletedAt: data.user.onboardingCompletedAt ?? null,
+      intentChosen: data.user.intentChosen !== false,
     });
   }, []);
 

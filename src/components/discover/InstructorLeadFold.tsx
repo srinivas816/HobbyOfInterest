@@ -35,7 +35,7 @@ const InstructorLeadFold = () => {
           </ul>
           <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-3">
             <Button className="rounded-full h-12 px-8 text-base" asChild>
-              <Link to={`/login?mode=register&role=instructor&next=${STUDIO_NEXT}`}>
+              <Link to={`/login?next=${STUDIO_NEXT}`}>
                 Start teaching
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
               </Link>

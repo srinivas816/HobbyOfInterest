@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch } from "@/lib/api";
+import { isValidIndianMobileDigits, normalizePhoneFieldInput } from "@/lib/phoneDigits";
 import { cn } from "@/lib/utils";
 import { useEffect, useRef, useState } from "react";
 
@@ -87,7 +88,6 @@ const JoinClassPage = () => {
   const [joinName, setJoinName] = useState("");
   const [joinOtpSent, setJoinOtpSent] = useState(false);
   const [joinDemoOtp, setJoinDemoOtp] = useState<string | null>(null);
-  const [joinDemoHint, setJoinDemoHint] = useState<string | null>(null);
   const [joinBusy, setJoinBusy] = useState(false);
   const [joinFailure, setJoinFailure] = useState<JoinInviteErr | null>(null);
   const [successInfo, setSuccessInfo] = useState<{ courseSlug: string; title: string } | null>(null);
@@ -196,7 +196,7 @@ const JoinClassPage = () => {
   }, [resendIn]);
 
   const sendJoinOtp = async (isResend = false) => {
-    if (!joinPhone.trim() || joinBusy) return;
+    if (!isValidIndianMobileDigits(joinPhone) || joinBusy) return;
     if (isResend && resendIn > 0) return;
     setJoinBusy(true);
     setOtpInlineError(null);
@@ -204,13 +204,12 @@ const JoinClassPage = () => {
       const out = await requestOtp(joinPhone);
       setJoinOtpSent(true);
       setJoinDemoOtp(out.demoOtp ?? null);
-      setJoinDemoHint(out.demoOtpHint ?? null);
       setResendIn(OTP_RESEND_SECONDS);
       if (isResend) {
         setJoinOtp("");
         toast.success("New code sent");
       } else {
-        toast.success(out.demoOtp ? "Code ready — see below" : "We sent a code to your phone");
+        toast.success(out.demoOtp ? "Code ready — check below" : "Check your phone for the code");
       }
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not send code");
@@ -226,7 +225,7 @@ const JoinClassPage = () => {
     setJoinFailure(null);
     setOtpInlineError(null);
     try {
-      await verifyOtp(joinPhone, joinOtp, joinName.trim() || undefined, "LEARNER");
+      await verifyOtp(joinPhone, joinOtp, joinName.trim() || undefined);
       const trimmed = joinName.trim();
       if (trimmed) {
         try {
@@ -443,22 +442,22 @@ const JoinClassPage = () => {
                   <Input
                     id="jphone"
                     type="tel"
-                    inputMode="tel"
+                    inputMode="numeric"
+                    maxLength={10}
                     value={joinPhone}
                     onChange={(e) => {
-                      setJoinPhone(e.target.value);
+                      setJoinPhone(normalizePhoneFieldInput(e.target.value));
                       setJoinDemoOtp(null);
-                      setJoinDemoHint(null);
                     }}
                     autoComplete="tel"
-                    placeholder="Your mobile number"
+                    placeholder="10-digit mobile"
                   />
                 </div>
                 {!joinOtpSent ? (
                   <Button
                     type="button"
                     className="w-full rounded-full h-12 text-base font-bold"
-                    disabled={joinBusy || !joinPhone.trim()}
+                    disabled={joinBusy || !isValidIndianMobileDigits(joinPhone)}
                     onClick={() => void sendJoinOtp(false)}
                   >
                     {joinBusy ? (
@@ -477,7 +476,6 @@ const JoinClassPage = () => {
                       <div className="rounded-xl border border-accent/50 bg-accent/10 px-3 py-3 text-center">
                         <p className="text-[10px] uppercase text-muted-foreground font-body">Demo code</p>
                         <p className="font-mono text-2xl tracking-widest font-semibold">{joinDemoOtp}</p>
-                        {joinDemoHint ? <p className="text-[10px] text-muted-foreground mt-1">{joinDemoHint}</p> : null}
                       </div>
                     ) : null}
                     <div className="space-y-2">

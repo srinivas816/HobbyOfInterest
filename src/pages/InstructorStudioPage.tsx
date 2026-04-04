@@ -1174,15 +1174,23 @@ const InstructorStudioPage = () => {
 
   return (
     <main className="container mx-auto py-16 pb-24">
+      {mvpFocus ? (
+        <div className="mb-5 flex flex-col gap-2 rounded-xl border border-border/60 bg-muted/25 px-3 py-3 sm:flex-row sm:items-center sm:justify-between">
+          <Link
+            to="/instructor/home"
+            className="text-sm font-medium text-accent hover:underline font-body"
+          >
+            ← Teaching app (Home)
+          </Link>
+          <p className="text-xs text-muted-foreground font-body sm:text-right">Listings &amp; lessons here — daily teaching uses the app tabs.</p>
+        </div>
+      ) : null}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
           <h1 className="font-heading text-3xl">{mvpFocus ? "Your classes & students" : "Instructor Studio"}</h1>
           <p className="text-sm text-muted-foreground mt-2 max-w-2xl font-body leading-relaxed">
             {mvpFocus ? (
-              <>
-                Create a class, invite students with a link or WhatsApp, then use Teaching tools for attendance and monthly fees. Video lessons
-                and full curriculum live under <span className="text-foreground/90">Advanced</span> below — optional for day one.
-              </>
+              <>Create classes, publish lessons, and manage invites. For attendance and fees, use <span className="text-foreground/90">Home</span> and <span className="text-foreground/90">Classes</span> in the teaching app.</>
             ) : (
               <>
                 Edit class listings, curriculum, and media. Use Teaching tools for roster, announcements, Q&amp;A, assignments, and demo payouts;

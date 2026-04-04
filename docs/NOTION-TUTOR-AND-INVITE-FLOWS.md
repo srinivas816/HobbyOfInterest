@@ -110,7 +110,7 @@ Single large page; select a class, then use **Teaching tools**.
 - **A. No JWT (guest / not signed in on this device)**  
   - **Phone OTP on the join page** (not a redirect to `/login` for this path).  
   - Send OTP → 6-digit code → optional **name** (first-time account).  
-  - **“Verify & join class”** calls `verifyOtp(..., "LEARNER")`, then immediately **`POST /api/enrollments/join-invite`** with the new session token.
+  - **“Verify & join class”** calls `verifyOtp(phone, code, name?)` (no role — new accounts are **LEARNER** with `intentChosen: false` until join completes), then **`POST /api/enrollments/join-invite`**, which sets **`intentChosen: true`** on the user so they skip **`/choose-role`**.
 - **B. Already has a token** (account signed in on this device; token attached by `apiFetch` from `localStorage` in `src/lib/api.ts`)  
   - **No OTP** on the join page.  
   - **“Join this class”** → same **`POST /api/enrollments/join-invite`** with the current user.

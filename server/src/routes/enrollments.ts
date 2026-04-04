@@ -83,6 +83,10 @@ router.post("/join-invite", authRequired, async (req: AuthedRequest, res) => {
   }
 
   if (outcome.type === "idempotent") {
+    await prisma.user.update({
+      where: { id: req.userId! },
+      data: { intentChosen: true },
+    });
     funnelLog("join_success", req.userId, { courseSlug: outcome.courseSlug, idempotent: true });
     res.status(200).json({ ok: true, courseSlug: outcome.courseSlug });
     return;
@@ -96,6 +100,11 @@ router.post("/join-invite", authRequired, async (req: AuthedRequest, res) => {
     });
     return;
   }
+
+  await prisma.user.update({
+    where: { id: req.userId! },
+    data: { intentChosen: true },
+  });
 
   const rosterSize = await prisma.enrollment.count({ where: { courseId: course.id } });
   funnelLog(rosterSize <= 1 ? "first_student_joined" : "student_joined", course.instructorId, {

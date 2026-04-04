@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useState, useEffect, useRef, useLayoutEffect } from "react";
 import { useSearchParams, Link } from "react-router-dom";
 import { ArrowLeft, Search } from "lucide-react";
 import ScrollReveal from "@/components/ScrollReveal";
@@ -19,6 +19,15 @@ const CoursesPage = () => {
   const [format, setFormat] = useState<"" | "ONLINE" | "IN_PERSON">("");
   const [sort, setSort] = useState<"popular" | "price-asc" | "price-desc" | "rating">("popular");
   const [page, setPage] = useState(1);
+  const coursesGridAnchorRef = useRef<HTMLDivElement>(null);
+  const prevPageRef = useRef<number | null>(null);
+
+  useLayoutEffect(() => {
+    if (prevPageRef.current !== null && prevPageRef.current !== page) {
+      coursesGridAnchorRef.current?.scrollIntoView({ behavior: "auto", block: "start" });
+    }
+    prevPageRef.current = page;
+  }, [page]);
 
   useEffect(() => {
     setSearch(params.get("q") ?? "");
@@ -194,26 +203,28 @@ const CoursesPage = () => {
           </div>
         )}
 
-        {isLoading && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
-            {Array.from({ length: 8 }).map((_, i) => (
-              <div key={i} className="space-y-3">
-                <Skeleton className="aspect-[4/3] rounded-2xl w-full" />
-                <Skeleton className="h-4 w-3/4" />
-                <Skeleton className="h-3 w-1/2" />
+        {!isError && (
+          <div ref={coursesGridAnchorRef} className="scroll-mt-28">
+            {isLoading ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-12">
+                {Array.from({ length: 8 }).map((_, i) => (
+                  <div key={i} className="space-y-3">
+                    <Skeleton className="aspect-[4/3] rounded-2xl w-full" />
+                    <Skeleton className="h-4 w-3/4" />
+                    <Skeleton className="h-3 w-1/2" />
+                  </div>
+                ))}
               </div>
-            ))}
+            ) : (
+              <StaggerChildren className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-12" staggerDelay={0.06}>
+                {courses.map((course) => (
+                  <StaggerItem key={course.slug}>
+                    <CourseCard course={course} />
+                  </StaggerItem>
+                ))}
+              </StaggerChildren>
+            )}
           </div>
-        )}
-
-        {!isLoading && !isError && (
-          <StaggerChildren className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mt-12" staggerDelay={0.06}>
-            {courses.map((course) => (
-              <StaggerItem key={course.slug}>
-                <CourseCard course={course} />
-              </StaggerItem>
-            ))}
-          </StaggerChildren>
         )}
 
         {!isLoading && !isError && courses.length === 0 && (

@@ -28,7 +28,7 @@ Full-stack **creative-class marketplace** with **instructor studio**, **learner 
 | **Classroom** | Per-course announcements, Q&A, assignments + submissions; learners see attendance/fee summary when the tutor records sessions |
 | **Instructor Studio** | Profile, create/edit courses, sections & lessons, media uploads, publish toggle, roster, announcements (optional email via SMTP), Q&A, assignments, **invite link + WhatsApp share**, **class sessions + attendance**, **monthly fee ledger per student**, **manual payout requests** (demo balance math) |
 | **Join by invite** | Public preview by code, authenticated `POST` enroll; works for **draft** classes |
-| **Auth** | Email/password register & login; **phone OTP** (passwordless learner); **link phone** in Settings (OTP); JWT in `Authorization` header |
+| **Auth** | **UI: phone OTP only** on `/login` → **`/choose-role`** (new users: Learn vs Teach) → **`PATCH /api/me`** `{ role }` sets `intentChosen`; **API** still has email register/login for seeds/tools; **link phone** in Settings (OTP); JWT in `localStorage` + `Authorization` |
 | **Onboarding** | Learner/instructor flows with optional LLM assist (Gemini/OpenAI) or catalog fallbacks |
 | **Admin** | Moderation for reported/hidden reviews (emails in `ADMIN_EMAILS`) |
 
@@ -50,7 +50,7 @@ PostgreSQL. After schema changes: `cd server && npx prisma db push` (and `npm ru
 
 | Model | Purpose |
 |--------|---------|
-| **User** | `email` (unique), `passwordHash`, optional `phone` (unique), `name`, `role`, `planTier`, `specialty`, instructor counters, `onboardingProfile` (JSON), `onboardingCompletedAt` |
+| **User** | `email` (unique), `passwordHash`, optional `phone` (unique), `name`, `role`, `planTier`, `specialty`, instructor counters, `onboardingProfile` (JSON), `onboardingCompletedAt`, **`intentChosen`** (false until `/choose-role` or successful **join-invite**) |
 
 ### Marketplace & content
 
@@ -100,10 +100,10 @@ Mounted under `/api` (see `server/src/index.ts`).
 
 | Prefix | Responsibility |
 |--------|------------------|
-| **`/api/auth`** | `POST /register`, `POST /login`, `GET /me` (JWT); `POST /otp/request`, `POST /otp/verify` (phone login; uses `OtpChallenge` with `linkUserId: null`) |
+| **`/api/auth`** | `POST /register`, `POST /login`, `GET /me` (JWT); `POST /otp/request`, `POST /otp/verify` (phone signup/login; new users `intentChosen: false` until choose-role or **join-invite**) |
 | **`/api/courses`** | List/search/filter courses; **`GET /by-invite/:code`** (public preview); `GET /:slug` detail; lessons; reviews |
 | **`/api/enrollments`** | `POST /` enroll (published courses); **`POST /join-invite`** `{ inviteCode }` (draft OK); `GET /` my enrollments; `DELETE /:slug` |
-| **`/api/me`** | `PATCH /profile` (name); **`POST /phone/request-link`**, **`POST /phone/verify-link`**; plan patch; favorites; **`GET /enrolled/:slug/tracking`** (attendance % + current month fee status); `GET /for-you` (learners) |
+| **`/api/me`** | **`PATCH /`** `{ role: "LEARNER" \| "INSTRUCTOR" }` (first-run intent + `intentChosen: true`); `PATCH /profile` (name); **`POST /phone/request-link`**, **`POST /phone/verify-link`**; plan patch; favorites; **`GET /enrolled/:slug/tracking`**; `GET /for-you` (learners) |
 | **`/api/instructor-studio`** | Courses CRUD-ish, sections/lessons, profile, announcements, assignments, roster, **invite** + regenerate, **sessions** + **attendance** PUT, **fees** GET/PUT by `yearMonth`, payouts summary/tax/request |
 | **`/api/course-engagement`** | Classroom: announcements, questions, answers (used by learner UI + studio tools) |
 | **`/api/progress`** | Mark lesson complete; fetch progress |
@@ -125,8 +125,9 @@ All app routes live under `MarketingLayout` (navbar, footer, mobile bottom nav).
 | `/` | Marketing home |
 | `/courses`, `/courses/:slug` | Catalog & detail |
 | `/instructors`, `/instructors/:id` | Instructor discovery & profile |
-| `/login` | Email/password **or** **Phone OTP** (learners) |
-| `/onboarding` | Post-signup learner/instructor setup |
+| `/login` | **Phone only:** number → **Continue** → 6-digit OTP → **Verify** |
+| `/choose-role` | **New phone users only:** Teach → `/instructor/activate` · Learn → `/learn` (after `PATCH /api/me`) |
+| `/onboarding` | Optional profile setup (learners may still be nudged here if `onboardingCompletedAt` is null) |
 | `/join/:code` | Invite preview → sign in → enroll |
 | `/learn` | My learning (enrollments, progress) |
 | `/learn/:slug/lesson/:lessonId` | Lesson player |
@@ -150,24 +151,24 @@ All app routes live under `MarketingLayout` (navbar, footer, mobile bottom nav).
 
 ## 5. End-to-end flows
 
-### A. Email learner: discover → enroll → learn
+### A. Learner: discover → enroll → learn (phone UI)
 
 1. User browses **`/courses`** → opens **`/courses/:slug`**.
-2. Registers/logs in via **`/login`** (email path) → may be redirected to **`/onboarding`** until `onboardingCompletedAt` is set.
+2. Signs in via **`/login`** (phone OTP). **Returning users** → **`/learn`**. **New users** → **`/choose-role`** → **Learn something** → **`/learn`** (and may see **`/onboarding`** if profile not completed).
 3. Enrolls via course page (**`POST /api/enrollments`**) if class is **published**.
 4. **`/learn`** lists enrollments; opens lesson player or **`/learn/:slug/classroom`**.
 5. Completing lessons hits **`/api/progress`**; classroom loads **`/api/course-engagement/...`**.
 
-### B. Phone learner (passwordless, demo OTP on screen)
+### B. Phone OTP (primary UI; demo code on screen when enabled)
 
-1. **`/login`** → **Phone OTP** tab → enter any non-empty “phone” (digits or text; server normalizes).
-2. **`POST /api/auth/otp/request`** → when demo mode, UI shows **`demoOtp`**; user types it + name on first account.
-3. **`POST /api/auth/otp/verify`** → JWT; new users get synthetic `p_*@phone.hoi` email and `phone` set.
-4. Same onboarding redirect rules as email learners if onboarding incomplete.
+1. **`/login`** → enter phone → **Continue** → **`POST /api/auth/otp/request`**.
+2. When demo mode, UI shows **`demoOtp`**; user enters 6-digit code + **name** on first account.
+3. **`POST /api/auth/otp/verify`** → JWT; new users: `role` **LEARNER**, **`intentChosen: false`**, synthetic `p_*@phone.hoi` + `phone` set.
+4. **`goAfterAuth`:** if **`intentChosen === false`** → **`/choose-role`**; else instructor → **`/instructor/home`**, learner → **`/learn`**.
 
 ### C. Instructor: create class → invite → roster / attendance / fees
 
-1. Register as **Instructor** on **`/login`** (email) → **`/onboarding`** → **`/instructor/studio`**.
+1. **`/login`** (phone) → **`/choose-role`** → **Teach a class** → **`PATCH /api/me`** → **`/instructor/activate`** → draft class → **`/instructor/studio`** (and **`/onboarding`** as needed).
 2. **Create class** (draft allowed); API assigns **`inviteCode`** on create (or on first invite fetch).
 3. **Roster tab:** copy **`/join/{code}`**, **WhatsApp** prefilled message, regenerate code; **add ClassSession** (datetime); select session → toggle **attendance** → save; pick **month** → **Paid/Pending** per student → save ( **`EnrollmentFeePeriod`** ).
 4. **Announce / Q&A / Assignments** use same selected class; optional **email** if SMTP configured.
@@ -176,8 +177,8 @@ All app routes live under `MarketingLayout` (navbar, footer, mobile bottom nav).
 ### D. Student joins via invite (draft or published)
 
 1. Opens **`/join/ABC12XYZ`** → **`GET /api/courses/by-invite/:code`** shows preview.
-2. If not logged in → **`/login?next=/join/...`**.
-3. **`POST /api/enrollments/join-invite`** → enrollment + `studentCount` increment → redirect to **classroom**.
+2. Guest uses **inline phone OTP** on the join page (or may use **Sign in** link → **`/login`**).
+3. After OTP verify, **`POST /api/enrollments/join-invite`** sets **`intentChosen: true`** so they skip **`/choose-role`** → redirect to **classroom**.
 
 ### E. Link phone to existing email account
 
@@ -280,6 +281,8 @@ After seed (password **`demo12345`** unless changed):
 
 - Learner: **`learner@demo.com`**
 - Admin moderation: **`admin@demo.com`** (also in `ADMIN_EMAILS`)
+
+**Note:** **`/login` is phone OTP only.** Seeded email/password accounts are for **`POST /api/auth/login`**, Prisma Studio, or API clients — or sign in with phone and link that number in **Settings** to reuse a seeded profile.
 
 ---
 

@@ -159,17 +159,13 @@ const Navbar = () => {
               </button>
             </>
           ) : (
-            <Link to="/login" className="font-body text-sm text-foreground hover:text-accent transition-colors px-4 py-2">
-              Log in
+            <Link
+              to="/login"
+              className="font-body text-sm bg-foreground text-background px-6 py-3 rounded-full hover:opacity-90 transition-all duration-300 font-medium"
+            >
+              Continue
             </Link>
           )}
-          <button
-            type="button"
-            onClick={() => navigate("/login?mode=register&next=/learn")}
-            className="font-body text-sm bg-foreground text-background px-6 py-3 rounded-full hover:opacity-90 transition-all duration-300 font-medium"
-          >
-            Get Started Free
-          </button>
         </div>
 
         <button type="button" className="lg:hidden shrink-0 text-foreground p-1" onClick={() => setMobileOpen(!mobileOpen)}>
@@ -244,20 +240,14 @@ const Navbar = () => {
                   </button>
                 </>
               ) : (
-                <Link to="/login" className="font-body text-sm text-foreground py-2 text-left" onClick={() => setMobileOpen(false)}>
-                  Log in
+                <Link
+                  to="/login"
+                  className="font-body text-sm bg-foreground text-background px-5 py-3 rounded-full text-center font-medium"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  Continue
                 </Link>
               )}
-              <button
-                type="button"
-                onClick={() => {
-                  setMobileOpen(false);
-                  navigate("/login?mode=register&next=/learn");
-                }}
-                className="font-body text-sm bg-foreground text-background px-5 py-3 rounded-full text-center font-medium"
-              >
-                Get Started Free
-              </button>
             </div>
           </motion.div>
         )}

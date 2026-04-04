@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookOpen, ChevronRight, CreditCard, GraduationCap, UserRound } from "lucide-react";
+import { BarChart3, BookOpen, ChevronRight, CreditCard, GraduationCap, Home, UserRound } from "lucide-react";
 
 const sections: {
   title: string;
@@ -42,7 +42,24 @@ const InstructorMorePage = () => {
   return (
     <div className="container mx-auto max-w-lg px-4 pt-6 pb-4">
       <h1 className="font-heading text-2xl text-foreground">More</h1>
-      <p className="text-sm text-muted-foreground font-body mt-1">Deeper tools — grouped so nothing feels like a junk drawer.</p>
+      <p className="text-sm text-muted-foreground font-body mt-1">Extras — curriculum, billing, analytics.</p>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Link
+          to="/instructor/home"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium font-body text-foreground hover:bg-muted/50"
+        >
+          <Home className="h-3.5 w-3.5 text-accent" aria-hidden />
+          Home
+        </Link>
+        <Link
+          to="/instructor/classes"
+          className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-card px-3 py-1.5 text-xs font-medium font-body text-foreground hover:bg-muted/50"
+        >
+          <GraduationCap className="h-3.5 w-3.5 text-accent" aria-hidden />
+          Classes
+        </Link>
+      </div>
 
       <div className="mt-8 space-y-8">
         {sections.map((sec) => (

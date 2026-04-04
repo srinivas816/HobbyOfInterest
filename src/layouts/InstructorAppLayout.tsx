@@ -1,4 +1,4 @@
-import { Outlet, Navigate, useLocation, Link } from "react-router-dom";
+import { Outlet, Navigate, useLocation, Link, useSearchParams } from "react-router-dom";
 import { Home, GraduationCap, Users, Menu } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { mvpInstructorFocus } from "@/lib/productFocus";
@@ -17,7 +17,9 @@ const nav = [
 const InstructorAppLayout = () => {
   const { user, token, ready } = useAuth();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
   const mvp = mvpInstructorFocus();
+  const workspaceTab = searchParams.get("tab");
 
   if (!mvp) {
     return <Outlet />;
@@ -53,7 +55,9 @@ const InstructorAppLayout = () => {
             const onClass = location.pathname.startsWith("/instructor/class/");
             const active = end
               ? location.pathname === to
-              : location.pathname.startsWith(to) || (to === "/instructor/classes" && onClass);
+              : to === "/instructor/students"
+                ? location.pathname === "/instructor/students" || (onClass && workspaceTab === "students")
+                : location.pathname.startsWith(to) || (to === "/instructor/classes" && onClass);
             return (
               <li key={to} className="flex-1 min-w-0">
                 <Link

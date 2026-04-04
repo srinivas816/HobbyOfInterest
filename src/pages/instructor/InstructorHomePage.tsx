@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CalendarClock, ChevronRight, Loader2, MessageCircle } from "lucide-react";
+import { ChevronRight, Loader2, MessageCircle } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, parseJson } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ type DashboardToday = {
   pendingAttendanceCount: number;
   pendingFeesCount: number;
   feeMonth: string;
+  totalStudentEnrollments?: number;
   scheduleToday?: Array<{
     sessionId: string;
     courseSlug: string;
@@ -56,6 +57,11 @@ const InstructorHomePage = () => {
   const pendingAtt = dash.data?.pendingAttendanceCount ?? 0;
   const pendingFees = dash.data?.pendingFeesCount ?? 0;
   const hasUrgency = pendingAtt > 0 || pendingFees > 0;
+  const courseCount = coursesQ.data?.courses.length ?? 0;
+  const totalLearners = dash.data?.totalStudentEnrollments ?? 0;
+  const hasClass = courseCount > 0;
+  const hasStudents = totalLearners > 0;
+  const showSetupRail = !hasClass || !hasStudents;
 
   return (
     <div className="container mx-auto max-w-lg px-4 pt-6 pb-4 animate-in fade-in duration-300">
@@ -63,7 +69,6 @@ const InstructorHomePage = () => {
         {greet}
         {user?.name ? `, ${user.name.split(" ")[0]}` : ""}
       </p>
-      <p className="text-sm text-muted-foreground font-body mt-1">Your day at a glance.</p>
 
       {dash.isLoading ? (
         <div className="flex justify-center py-16">
@@ -73,88 +78,101 @@ const InstructorHomePage = () => {
         <p className="text-sm text-muted-foreground mt-6 font-body">Couldn’t load today’s snapshot.</p>
       ) : (
         <>
-          {/* You need to — urgency first */}
+          {showSetupRail ? (
+            <section className="mt-5 rounded-2xl border border-border/80 bg-card px-4 py-4">
+              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground font-body">Get started</p>
+              <ol className="mt-3 space-y-2 text-sm font-body">
+                <li className="flex items-center gap-2">
+                  <span className={cn("font-semibold", hasClass ? "text-emerald-600" : "text-foreground")}>
+                    {hasClass ? "✓" : "1."} Create your first class
+                  </span>
+                  {!hasClass ? (
+                    <Button size="sm" className="rounded-full h-8 text-xs ml-auto" asChild>
+                      <Link to="/instructor/studio?setup=1#studio-create-class">Create</Link>
+                    </Button>
+                  ) : null}
+                </li>
+                <li className="flex items-center gap-2 flex-wrap">
+                  <span className={cn("font-semibold", hasStudents ? "text-emerald-600" : "text-foreground")}>
+                    {hasStudents ? "✓" : "2."} Add students
+                  </span>
+                  {hasClass && !hasStudents && firstSlug ? (
+                    <Button size="sm" variant="secondary" className="rounded-full h-8 text-xs ml-auto" asChild>
+                      <Link to={`/instructor/class/${encodeURIComponent(firstSlug)}?tab=students`}>Add</Link>
+                    </Button>
+                  ) : null}
+                </li>
+                <li className="text-muted-foreground text-xs pt-1">
+                  {hasStudents ? (
+                    <span className="text-emerald-700 dark:text-emerald-300 font-medium">✓ 3. After class → mark attendance</span>
+                  ) : (
+                    <>3. After class → mark attendance</>
+                  )}
+                </li>
+              </ol>
+            </section>
+          ) : null}
+
           {hasUrgency ? (
             <section
               className={cn(
-                "mt-6 rounded-2xl border-2 p-4 sm:p-5 shadow-sm",
-                "border-destructive/40 bg-gradient-to-b from-destructive/10 to-card",
+                "mt-5 rounded-2xl border-2 p-4 shadow-sm",
+                "border-destructive/35 bg-gradient-to-b from-destructive/10 to-card",
               )}
             >
-              <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-destructive/15 p-2 shrink-0">
-                  <AlertTriangle className="h-5 w-5 text-destructive" aria-hidden />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <h2 className="font-heading text-base text-foreground">You need to</h2>
-                  <ul className="mt-2 space-y-2 text-sm font-body text-foreground">
+              <h2 className="font-heading text-sm text-foreground">You need to</h2>
+              <ul className="mt-2 space-y-1.5 text-sm font-body text-foreground">
+                {pendingAtt > 0 ? (
+                  <li>
+                    <span className="font-semibold">Mark attendance</span> · {pendingAtt} open
+                  </li>
+                ) : null}
+                {pendingFees > 0 ? (
+                  <li>
+                    <span className="font-semibold">Fees</span> · {pendingFees} pending
+                  </li>
+                ) : null}
+              </ul>
+              <div className="mt-3 flex flex-col gap-2">
+                {primaryClass ? (
+                  <>
                     {pendingAtt > 0 ? (
-                      <li className="flex gap-2">
-                        <span className="text-destructive font-bold shrink-0">·</span>
-                        <span>
-                          <span className="font-semibold">Mark attendance</span> — {pendingAtt} slot{pendingAtt === 1 ? "" : "s"} still open for
-                          today.
-                        </span>
-                      </li>
+                      <Button className="rounded-full h-12 text-base w-full font-semibold" asChild>
+                        <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=attendance`}>Mark attendance</Link>
+                      </Button>
                     ) : null}
                     {pendingFees > 0 ? (
-                      <li className="flex gap-2">
-                        <span className="text-destructive font-bold shrink-0">·</span>
-                        <span>
-                          <span className="font-semibold">Collect fees</span> — {pendingFees} student{pendingFees === 1 ? "" : "s"} pending (
-                          {dash.data?.feeMonth}).
-                        </span>
-                      </li>
-                    ) : null}
-                  </ul>
-                  <div className="mt-4 flex flex-col gap-2">
-                    {primaryClass ? (
-                      <>
-                        {pendingAtt > 0 ? (
-                          <Button className="rounded-full h-12 text-base w-full font-semibold shadow-sm" asChild>
-                            <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=attendance`}>Mark attendance</Link>
-                          </Button>
-                        ) : null}
-                        {pendingFees > 0 ? (
-                          <Button
-                            variant="secondary"
-                            className="rounded-full h-12 text-base w-full font-semibold border-emerald-600/30 bg-emerald-600/10 text-emerald-950 hover:bg-emerald-600/20 dark:text-emerald-50"
-                            asChild
-                          >
-                            <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=fees`}>
-                              <MessageCircle className="mr-2 h-5 w-5 inline" aria-hidden />
-                              Remind students
-                            </Link>
-                          </Button>
-                        ) : null}
-                      </>
-                    ) : (
-                      <Button className="rounded-full h-12 text-base w-full" asChild>
-                        <Link to="/instructor/classes">Open a class</Link>
+                      <Button variant="secondary" className="rounded-full h-12 text-base w-full font-semibold" asChild>
+                        <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=fees`}>
+                          <MessageCircle className="mr-2 h-5 w-5 inline" aria-hidden />
+                          Remind students
+                        </Link>
                       </Button>
-                    )}
-                  </div>
-                </div>
+                    ) : null}
+                  </>
+                ) : (
+                  <Button className="rounded-full h-12 text-base w-full" asChild>
+                    <Link to="/instructor/classes">Open a class</Link>
+                  </Button>
+                )}
               </div>
             </section>
           ) : (
-            <section className="mt-6 rounded-2xl border border-emerald-500/35 bg-emerald-500/8 px-4 py-3">
+            <section className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-3 py-2.5">
               <p className="text-sm font-body text-foreground">
-                <span className="font-semibold text-emerald-800 dark:text-emerald-200">You’re caught up</span> for today — no open attendance
-                slots or fee alerts on your dashboard.
+                <span className="font-semibold text-emerald-800 dark:text-emerald-200">Caught up</span> · nothing urgent today
               </p>
             </section>
           )}
 
-          <section className="mt-8">
+          <section className="mt-6">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-body">Today</h2>
-            <p className="text-[11px] text-muted-foreground font-body mt-1">Sessions on your calendar</p>
-            <div className="mt-3 space-y-3">
+            <div className="mt-2 space-y-3">
               {(dash.data?.scheduleToday?.length ?? 0) === 0 ? (
-                <div className="rounded-2xl border border-border/60 bg-card/60 p-5 text-center">
-                  <p className="text-sm text-muted-foreground font-body">No sessions scheduled for today.</p>
-                  <Button className="mt-4 rounded-full w-full h-12 text-base" variant="secondary" asChild>
-                    <Link to="/instructor/classes">View your classes</Link>
+                <div className="rounded-2xl border border-border/60 bg-card/60 p-4 text-center">
+                  <p className="text-sm text-muted-foreground font-body">No sessions today.</p>
+                  <Button className="mt-3 rounded-full w-full h-11 text-sm" variant="secondary" asChild>
+                    <Link to="/instructor/classes">Classes</Link>
                   </Button>
                 </div>
               ) : (
@@ -179,32 +197,6 @@ const InstructorHomePage = () => {
                     </div>
                   </Link>
                 ))
-              )}
-            </div>
-          </section>
-
-          <section className="mt-8">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-body">Quick actions</h2>
-            <div className="mt-3 grid grid-cols-1 gap-2">
-              {primaryClass ? (
-                <>
-                  <Button variant="outline" className="rounded-full h-12 text-base justify-start px-5" asChild>
-                    <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=attendance`}>
-                      <CalendarClock className="mr-3 h-5 w-5 text-accent shrink-0" aria-hidden />
-                      Attendance for this class
-                    </Link>
-                  </Button>
-                  <Button variant="outline" className="rounded-full h-12 text-base justify-start px-5" asChild>
-                    <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=fees`}>
-                      <MessageCircle className="mr-3 h-5 w-5 text-emerald-600 shrink-0" aria-hidden />
-                      Fees &amp; WhatsApp
-                    </Link>
-                  </Button>
-                </>
-              ) : (
-                <Button className="rounded-full h-12 text-base" asChild>
-                  <Link to="/instructor/classes">Create or open a class</Link>
-                </Button>
               )}
             </div>
           </section>

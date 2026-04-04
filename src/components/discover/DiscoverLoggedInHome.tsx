@@ -1,22 +1,9 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import type { LucideIcon } from "lucide-react";
-import {
-  ArrowRight,
-  BookOpen,
-  CalendarClock,
-  GraduationCap,
-  IndianRupee,
-  LayoutDashboard,
-  Link2,
-  Megaphone,
-  Sparkles,
-  Users,
-} from "lucide-react";
+import { ArrowRight, BookOpen, CalendarClock, GraduationCap, Megaphone } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, parseJson } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 import { mvpInstructorFocus } from "@/lib/productFocus";
 
 type EnrollmentRow = {
@@ -99,7 +86,6 @@ function InstructorLoggedInPanel() {
   });
 
   const cap = sub.data?.freeLearnerCap ?? 10;
-  const price = sub.data?.monthlyPriceDisplay ?? "₹299/month";
   const nearFreeCap =
     sub.data &&
     !sub.data.paid &&
@@ -115,296 +101,115 @@ function InstructorLoggedInPanel() {
     : ROSTER_LEGACY;
   const ANNOUNCE = mvp
     ? firstSlug
-      ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=announce`
+      ? `/instructor/class/${encodeURIComponent(firstSlug)}?panel=announce`
       : "/instructor/classes"
     : ANNOUNCE_LEGACY;
 
-  return (
-    <section className="border-b border-border/40 bg-gradient-to-b from-accent/14 via-card/50 to-background">
-      <div className="container mx-auto px-4 sm:px-6 py-4 sm:py-6 space-y-5">
-        {/* Money loop — top */}
-        <div
-          className={cn(
-            "rounded-2xl border px-4 py-4 sm:px-5 sm:py-5 shadow-sm",
-            sub.data && !sub.data.paid && sub.data.capReached
-              ? "border-destructive/50 bg-destructive/10"
-              : "border-accent/40 bg-card/90 backdrop-blur-sm",
-          )}
-        >
-          {sub.isPending ? (
-            <div className="h-16 rounded-xl bg-muted/50 animate-pulse" aria-hidden />
-          ) : sub.isError ? (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-              <div>
-                <p className="font-body text-xs font-semibold uppercase tracking-wide text-accent">Your plan</p>
-                <p className="font-heading text-base sm:text-lg text-foreground mt-1">Free plan: up to 10 students</p>
-                <p className="font-body text-sm text-muted-foreground mt-1">
-                  Upgrade to Pro {price} for more roster room. Open account settings to review options.
-                </p>
-              </div>
-              <Button className="rounded-full shrink-0" asChild>
-                <Link to={PLAN_UPGRADE}>Upgrade</Link>
-              </Button>
-            </div>
-          ) : sub.data?.paid ? (
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-              <p className="font-body text-sm text-foreground">
-                <span className="font-semibold">Paid plan active</span> —{" "}
-                {sub.data.planTier.replace(/_/g, " ")}. Keep inviting; limits follow your tier.
-              </p>
-              <Button variant="outline" size="sm" className="rounded-full shrink-0" asChild>
-                <Link to={PLAN_UPGRADE}>Plan details</Link>
-              </Button>
-            </div>
-          ) : (
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
-              <div className="min-w-0 space-y-1">
-                <p className="font-body text-[11px] font-semibold uppercase tracking-[0.15em] text-accent">Monetization</p>
-                <p className="font-heading text-lg sm:text-xl text-foreground leading-snug">
-                  {!sub.data.trialActive && sub.data.capReached
-                    ? `Free limit reached (${cap} students)`
-                    : `Free plan: up to ${cap} students`}
-                  {sub.data.trialActive ? (
-                    <span className="font-body text-sm font-normal text-muted-foreground block mt-1">
-                      Trial: unlimited for ~{sub.data.trialDays} days from signup, then this cap applies.
-                    </span>
-                  ) : null}
-                </p>
-                <p className="font-body text-sm text-muted-foreground">
-                  {!sub.data.trialActive && sub.data.capReached ? (
-                    <>
-                      <span className="text-foreground font-semibold">Free limit reached.</span> Upgrade to Pro{" "}
-                      <span className="text-foreground font-medium">{price}</span> to add more students — required to grow past {cap}.
-                    </>
-                  ) : (
-                    <>
-                      Upgrade to Pro <span className="text-foreground font-medium">{price}</span> before you hit the wall.
-                    </>
-                  )}
-                </p>
-                {nearFreeCap ? (
-                  <p className="mt-2 rounded-xl border border-amber-500/45 bg-amber-500/10 px-3 py-2 text-sm font-body text-foreground">
-                    You’ve added{" "}
-                    <span className="font-semibold">
-                      {sub.data.distinctLearnerCount}/{sub.data.freeLearnerCap}
-                    </span>{" "}
-                    students — upgrade to continue growing your class.
-                  </p>
-                ) : null}
-                <p className="font-body text-xs text-muted-foreground mt-1">{sub.data.upgradeNote}</p>
-                {!sub.data.capEnforced ? (
-                  <p className="font-body text-[11px] text-muted-foreground mt-1">
-                    Server cap enforcement is off — still show learners a professional upgrade path.
-                  </p>
-                ) : null}
-              </div>
-              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 shrink-0">
-                <Button className="rounded-full h-11 px-6" asChild>
-                  <Link to={PLAN_UPGRADE}>
-                    {!sub.data.trialActive && sub.data.capReached ? "Upgrade ₹299" : "Upgrade"}
-                  </Link>
-                </Button>
-                <p className="font-body text-xs text-center sm:text-left text-muted-foreground sm:max-w-[10rem]">
-                  {sub.data.distinctLearnerCount}/{cap} students on roster
-                </p>
-              </div>
-            </div>
-          )}
-        </div>
+  const feesHref = mvp
+    ? firstSlug
+      ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=fees`
+      : "/instructor/classes"
+    : ROSTER_LEGACY;
 
-        {/* Daily habit — before discovery */}
-        <div>
-          <div className="flex flex-wrap items-end justify-between gap-2 mb-3">
-            <div>
-              <h2 className="font-heading text-lg sm:text-xl text-foreground">Today</h2>
-              <p className="font-body text-xs text-muted-foreground mt-0.5 max-w-xl">
-                {dash.isPending ? (
-                  "Loading today’s snapshot…"
-                ) : dash.isError ? (
-                  "Mark attendance and post a quick update — students check Classroom daily."
-                ) : dash.data ? (
-                  <>
-                    <span className="text-foreground font-medium">
-                      {dash.data.sessionsToday} {dash.data.sessionsToday === 1 ? "session" : "sessions"} today
-                    </span>
-                    {" · "}
-                    <span className="text-foreground font-medium">
-                      {dash.data.pendingAttendanceCount}{" "}
-                      {dash.data.pendingAttendanceCount === 1 ? "student" : "students"} need attendance marked
-                    </span>
-                    {" · "}
-                    <span className="text-foreground font-medium">
-                      {dash.data.pendingFeesCount} fee{dash.data.pendingFeesCount === 1 ? "" : "s"} pending (
-                      {dash.data.feeMonth})
-                    </span>
-                    .
-                  </>
-                ) : (
-                  "Mark attendance and post a quick update — students check Classroom daily."
-                )}
-              </p>
-            </div>
-            <span className="inline-flex items-center gap-1.5 rounded-full bg-accent/15 px-3 py-1 font-body text-[11px] font-medium text-foreground">
-              <LayoutDashboard size={14} className="text-accent" aria-hidden />
-              Instructor
-            </span>
+  return (
+    <section className="border-b border-border/40 bg-gradient-to-b from-accent/10 to-background">
+      <div className="container mx-auto px-4 py-4 space-y-4">
+        {sub.isPending ? <div className="h-10 rounded-lg bg-muted/50 animate-pulse" aria-hidden /> : null}
+        {!sub.isPending && sub.isError ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border/60 bg-card px-3 py-2">
+            <p className="text-sm text-muted-foreground font-body">Plan</p>
+            <Button size="sm" className="rounded-full" asChild>
+              <Link to={PLAN_UPGRADE}>Open</Link>
+            </Button>
           </div>
-          <div className="flex flex-wrap gap-2 mb-3">
-            <Button className="rounded-full h-10 sm:h-9" size="sm" asChild>
+        ) : null}
+        {sub.data && !sub.data.paid && sub.data.capReached ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-destructive/40 bg-destructive/10 px-3 py-2">
+            <p className="text-sm font-medium text-foreground font-body">Student limit reached</p>
+            <Button size="sm" className="rounded-full shrink-0" asChild>
+              <Link to={PLAN_UPGRADE}>Upgrade</Link>
+            </Button>
+          </div>
+        ) : null}
+        {nearFreeCap && sub.data ? (
+          <p className="text-xs text-amber-900 dark:text-amber-100 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 py-2 font-body">
+            Near limit ({sub.data.distinctLearnerCount}/{cap}).{" "}
+            <Link to={PLAN_UPGRADE} className="font-semibold underline">
+              Plan
+            </Link>
+          </p>
+        ) : null}
+        {sub.data?.paid ? (
+          <p className="text-xs text-muted-foreground font-body">
+            Paid plan ·{" "}
+            <Link to={PLAN_UPGRADE} className="underline font-medium text-foreground">
+              Details
+            </Link>
+          </p>
+        ) : null}
+
+        <div>
+          <div className="flex items-center justify-between gap-2">
+            <h2 className="font-heading text-base text-foreground">Today</h2>
+            <span className="text-[10px] uppercase tracking-wide text-muted-foreground font-semibold">Instructor</span>
+          </div>
+
+          {dash.data && (dash.data.scheduleToday?.length ?? 0) > 0 ? (
+            <ul className="mt-2 space-y-2 rounded-xl border border-border/50 bg-card/80 p-3">
+              {(dash.data.scheduleToday ?? []).map((s) => (
+                <li key={s.sessionId} className="flex justify-between gap-2 text-sm font-body">
+                  <span className="text-foreground">
+                    <span className="font-semibold tabular-nums">
+                      {new Date(s.heldAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                    <span className="text-muted-foreground"> · </span>
+                    {s.courseTitle}
+                  </span>
+                  <span className="text-xs text-muted-foreground shrink-0">{s.studentCount}</span>
+                </li>
+              ))}
+            </ul>
+          ) : !dash.isPending ? (
+            <p className="mt-2 text-sm text-muted-foreground font-body">No sessions today.</p>
+          ) : null}
+
+          {dash.data && (dash.data.pendingFeesCount ?? 0) > 0 ? (
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-2">
+              <p className="text-sm font-body text-foreground">
+                <span className="font-semibold">{dash.data.pendingFeesCount}</span> fee{(dash.data.pendingFeesCount ?? 0) === 1 ? "" : "s"} pending
+              </p>
+              <Button size="sm" variant="secondary" className="rounded-full h-8 text-xs" asChild>
+                <Link to={feesHref}>Fees</Link>
+              </Button>
+            </div>
+          ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <Button className="rounded-full h-9 text-sm" size="sm" asChild>
               <Link to={ROSTER}>
                 <CalendarClock className="mr-1.5 h-4 w-4" aria-hidden />
-                Mark attendance
+                Attendance
               </Link>
             </Button>
-            <Button variant="secondary" className="rounded-full h-10 sm:h-9" size="sm" asChild>
+            <Button variant="outline" className="rounded-full h-9 text-sm" size="sm" asChild>
               <Link to={ANNOUNCE}>
                 <Megaphone className="mr-1.5 h-4 w-4" aria-hidden />
-                Post update
+                Announce
               </Link>
             </Button>
-          </div>
-          {dash.data && (dash.data.scheduleToday?.length ?? 0) > 0 ? (
-            <div className="mb-3 rounded-2xl border border-accent/30 bg-accent/8 p-3 sm:p-4 space-y-2">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-accent font-body">Today&apos;s schedule</p>
-              <ul className="space-y-2">
-                {(dash.data.scheduleToday ?? []).map((s) => (
-                  <li
-                    key={s.sessionId}
-                    className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 text-sm font-body border-b border-border/30 last:border-0 pb-2 last:pb-0"
-                  >
-                    <span className="text-foreground">
-                      <span className="font-semibold tabular-nums">
-                        {new Date(s.heldAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                      </span>
-                      <span className="text-muted-foreground"> · </span>
-                      {s.courseTitle}
-                      {s.label ? (
-                        <span className="text-muted-foreground text-xs"> ({s.label})</span>
-                      ) : null}
-                    </span>
-                    <span className="text-xs text-muted-foreground shrink-0">{s.studentCount} students</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          {dash.data && (dash.data.pendingFeesCount ?? 0) > 0 ? (
-            <div className="mb-3 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 rounded-xl border border-amber-500/40 bg-amber-500/10 px-3 py-3">
-              <p className="text-sm font-body text-foreground">
-                <span className="font-semibold">{dash.data.pendingFeesCount}</span> student
-                {(dash.data.pendingFeesCount ?? 0) === 1 ? "" : "s"} with pending fees ({dash.data.feeMonth ?? "this month"})
-              </p>
-              <Button size="sm" className="rounded-full shrink-0 bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
-                <Link to={ROSTER}>
-                  <Link2 className="mr-1.5 h-4 w-4 inline" aria-hidden />
-                  Open roster &amp; remind
-                </Link>
+            {mvp ? (
+              <Button variant="secondary" className="rounded-full h-9 text-sm" size="sm" asChild>
+                <Link to="/instructor/home">Home</Link>
               </Button>
-            </div>
-          ) : null}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <Link
-              to={ROSTER}
-              className="group rounded-2xl border-2 border-accent/35 bg-accent/10 px-4 py-4 sm:py-5 hover:bg-accent/15 transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-background/80 p-2 shadow-sm">
-                  <CalendarClock className="text-accent" size={22} aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-heading text-base text-foreground group-hover:text-accent transition-colors">
-                    Mark today&apos;s attendance
-                  </p>
-                  <p className="font-body text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Open sessions, tick who showed up, sync invite links.
-                  </p>
-                </div>
-                <ArrowRight
-                  className="text-muted-foreground group-hover:text-accent shrink-0 mt-1 transition-colors"
-                  size={18}
-                  aria-hidden
-                />
-              </div>
-            </Link>
-            <Link
-              to={ANNOUNCE}
-              className="group rounded-2xl border border-border/70 bg-background/80 px-4 py-4 sm:py-5 hover:border-accent/40 hover:bg-accent/5 transition-colors"
-            >
-              <div className="flex items-start gap-3">
-                <div className="rounded-xl bg-muted/50 p-2">
-                  <Megaphone className="text-accent" size={22} aria-hidden />
-                </div>
-                <div className="min-w-0">
-                  <p className="font-heading text-base text-foreground group-hover:text-accent transition-colors">Post an update</p>
-                  <p className="font-body text-xs text-muted-foreground mt-1 leading-relaxed">
-                    Short announcement → visible in learner Classroom.
-                  </p>
-                </div>
-                <ArrowRight
-                  className="text-muted-foreground group-hover:text-accent shrink-0 mt-1 transition-colors"
-                  size={18}
-                  aria-hidden
-                />
-              </div>
-            </Link>
-          </div>
-        </div>
-
-        {/* Studio shortcuts */}
-        <div>
-          <p className="font-body text-[11px] font-semibold uppercase tracking-wide text-muted-foreground mb-2">Studio</p>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 sm:gap-3">
-            <QuickAction
-              to={mvp ? "/instructor/home" : "/instructor/studio"}
-              icon={LayoutDashboard}
-              label="Dashboard"
-              sub={mvp ? "Today" : "Studio home"}
-            />
-            <QuickAction
-              to={mvp ? (firstSlug ? `/instructor/class/${encodeURIComponent(firstSlug)}` : "/instructor/classes") : ROSTER_LEGACY}
-              icon={Users}
-              label="Students"
-              sub="Roster & invites"
-            />
-            <QuickAction
-              to={mvp ? (firstSlug ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=fees` : "/instructor/classes") : ROSTER_LEGACY}
-              icon={IndianRupee}
-              label="Payments"
-              sub="Monthly fees"
-            />
-            <QuickAction
-              to={mvp ? "/instructor/classes" : "/instructor/studio#studio-create-class"}
-              icon={Sparkles}
-              label="Classes"
-              sub="Create & edit"
-            />
+            ) : (
+              <Button variant="secondary" className="rounded-full h-9 text-sm" size="sm" asChild>
+                <Link to="/instructor/studio">Studio</Link>
+              </Button>
+            )}
           </div>
         </div>
       </div>
     </section>
-  );
-}
-
-function QuickAction({
-  to,
-  icon: Icon,
-  label,
-  sub,
-}: {
-  to: string;
-  icon: LucideIcon;
-  label: string;
-  sub: string;
-}) {
-  return (
-    <Link
-      to={to}
-      className="flex flex-col gap-1 rounded-2xl border border-border/60 bg-background/90 p-3 sm:p-4 hover:border-accent/40 hover:bg-accent/5 transition-colors min-h-[5.25rem]"
-    >
-      <Icon className="text-accent shrink-0" size={20} aria-hidden />
-      <span className="font-body text-xs sm:text-sm font-semibold text-foreground leading-tight">{label}</span>
-      <span className="font-body text-[10px] sm:text-[11px] text-muted-foreground leading-snug">{sub}</span>
-    </Link>
   );
 }
 

@@ -1,32 +1,32 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Link, Navigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, CalendarClock, Loader2, MessageCircle, Search, UserPlus } from "lucide-react";
+import { ArrowLeft, Loader2, MessageCircle, X } from "lucide-react";
 import { toast } from "sonner";
 import { apiFetch, parseJson } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-type WTab = "students" | "attendance" | "fees" | "announce";
+type WTab = "students" | "attendance" | "fees";
 
-/** Daily-first order: attendance → fees → students → announce */
 const TAB_IDS: { id: WTab; label: string }[] = [
   { id: "attendance", label: "Attendance" },
   { id: "fees", label: "Fees" },
   { id: "students", label: "Students" },
-  { id: "announce", label: "Announce" },
 ];
 
 function isWTab(s: string): s is WTab {
-  return s === "attendance" || s === "fees" || s === "students" || s === "announce";
+  return s === "attendance" || s === "fees" || s === "students";
 }
 
 function formatFeeMonthLabel(ym: string): string {
   const [y, m] = ym.split("-");
   if (!y || !m) return ym;
-  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: "long", year: "numeric" });
+  return new Date(Number(y), Number(m) - 1, 1).toLocaleDateString(undefined, { month: "long" });
 }
+
+type PrimaryKind = "activation" | "empty" | "attendance" | "fees" | "none";
 
 const InstructorClassWorkspacePage = () => {
   const { slug: slugParam } = useParams<{ slug: string }>();
@@ -35,29 +35,67 @@ const InstructorClassWorkspacePage = () => {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const explicitTabRaw = searchParams.get("tab");
+  const panelAnnounce = searchParams.get("panel") === "announce";
   const autoTabSlugRef = useRef<string | null>(null);
+  const addStudentAnchorRef = useRef<HTMLDivElement>(null);
+  const attendanceHydratingRef = useRef(true);
+  const showActivationBanner = searchParams.get("activated") === "1";
 
   const setTab = useCallback(
     (t: WTab) => {
-      setSearchParams({ tab: t }, { replace: true });
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.set("tab", t);
+          next.delete("panel");
+          return next;
+        },
+        { replace: true },
+      );
     },
     [setSearchParams],
   );
+
+  const openAnnouncePanel = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("panel", "announce");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  const closeAnnouncePanel = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("panel");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
+  const dismissActivationBanner = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.delete("activated");
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
 
   const [feeYearMonth, setFeeYearMonth] = useState(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
   });
-  const [rosterSearch, setRosterSearch] = useState("");
   const [bulkEnrollInput, setBulkEnrollInput] = useState("");
-  const [bulkNamesInput, setBulkNamesInput] = useState("");
   const [selectedSessionId, setSelectedSessionId] = useState("");
   const [attendanceDraft, setAttendanceDraft] = useState<Record<string, boolean>>({});
-  const [newSessionHeldAt, setNewSessionHeldAt] = useState(() => {
-    const d = new Date();
-    d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-    return d.toISOString().slice(0, 16);
-  });
   const [announceTitle, setAnnounceTitle] = useState("");
   const [announceBody, setAnnounceBody] = useState("");
   const [announceEmailLearners, setAnnounceEmailLearners] = useState(false);
@@ -144,7 +182,7 @@ const InstructorClassWorkspacePage = () => {
 
   const studioAnnouncementsQuery = useQuery({
     queryKey: ["studio-announcements", slug],
-    enabled: Boolean(token && user?.role === "INSTRUCTOR" && slug),
+    enabled: Boolean(token && user?.role === "INSTRUCTOR" && slug && panelAnnounce),
     queryFn: async () => {
       const res = await apiFetch(`/api/course-engagement/${encodeURIComponent(slug)}/announcements`);
       return parseJson<{
@@ -173,15 +211,32 @@ const InstructorClassWorkspacePage = () => {
     });
   }, [sessionsQuery.data?.sessions]);
 
+  const hasSessionToday = useMemo(() => {
+    return sessionsToday.length > 0 || Boolean(rosterQuery.data?.summary.todaysSessionId);
+  }, [sessionsToday, rosterQuery.data?.summary.todaysSessionId]);
+
   const smartDefaultTab = useMemo((): WTab => {
     if (!rosterQuery.data || !sessionsQuery.data) return "attendance";
-    const hasToday = sessionsToday.length > 0 || Boolean(rosterQuery.data.summary.todaysSessionId);
-    if (hasToday) return "attendance";
+    if (hasSessionToday) return "attendance";
     if (rosterQuery.data.summary.pendingFeesCount > 0) return "fees";
     return "students";
-  }, [rosterQuery.data, sessionsQuery.data, sessionsToday]);
+  }, [rosterQuery.data, sessionsQuery.data, hasSessionToday]);
 
   const tab: WTab = explicitTabRaw && isWTab(explicitTabRaw) ? explicitTabRaw : smartDefaultTab;
+
+  useEffect(() => {
+    if (explicitTabRaw === "announce") {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev);
+          next.delete("tab");
+          next.set("panel", "announce");
+          return next;
+        },
+        { replace: true },
+      );
+    }
+  }, [explicitTabRaw, setSearchParams]);
 
   useEffect(() => {
     autoTabSlugRef.current = null;
@@ -189,29 +244,35 @@ const InstructorClassWorkspacePage = () => {
 
   useEffect(() => {
     if (explicitTabRaw && isWTab(explicitTabRaw)) return;
+    if (panelAnnounce) return;
     if (!slug || !rosterQuery.data || !sessionsQuery.data) return;
     if (autoTabSlugRef.current === slug) return;
     autoTabSlugRef.current = slug;
-    setSearchParams({ tab: smartDefaultTab }, { replace: true });
-  }, [slug, explicitTabRaw, smartDefaultTab, rosterQuery.data, sessionsQuery.data, setSearchParams]);
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        next.set("tab", smartDefaultTab);
+        return next;
+      },
+      { replace: true },
+    );
+  }, [slug, explicitTabRaw, smartDefaultTab, rosterQuery.data, sessionsQuery.data, panelAnnounce, setSearchParams]);
 
   useEffect(() => {
     const sessions = sessionsQuery.data?.sessions ?? [];
     const tid = rosterQuery.data?.summary?.todaysSessionId;
     const firstToday = sessionsToday[0]?.id;
     setSelectedSessionId((prev) => {
-      if (prev) return prev;
-      if (tid && sessions.some((s) => s.id === tid)) return tid;
-      if (firstToday && sessions.some((s) => s.id === firstToday)) return firstToday;
-      return prev;
+      const sessionOk = (id: string) => sessions.length === 0 || sessions.some((s) => s.id === id);
+      if (tid && sessionOk(tid)) return tid;
+      if (firstToday && sessionOk(firstToday)) return firstToday;
+      if (prev && sessionOk(prev)) return prev;
+      return "";
     });
-  }, [rosterQuery.data?.summary?.todaysSessionId, sessionsQuery.data?.sessions, sessionsToday]);
+  }, [slug, rosterQuery.data?.summary?.todaysSessionId, sessionsQuery.data?.sessions, sessionsToday]);
 
   useEffect(() => {
-    setSelectedSessionId("");
-  }, [slug]);
-
-  useEffect(() => {
+    attendanceHydratingRef.current = true;
     if (!attendanceQuery.data) {
       setAttendanceDraft({});
       return;
@@ -219,19 +280,10 @@ const InstructorClassWorkspacePage = () => {
     const o: Record<string, boolean> = {};
     for (const s of attendanceQuery.data.students) o[s.enrollmentId] = s.present;
     setAttendanceDraft(o);
+    queueMicrotask(() => {
+      attendanceHydratingRef.current = false;
+    });
   }, [attendanceQuery.data]);
-
-  const filteredStudents = useMemo(() => {
-    const q = rosterSearch.trim().toLowerCase();
-    const list = rosterQuery.data?.students ?? [];
-    if (!q) return list;
-    return list.filter(
-      (s) =>
-        s.learner.name.toLowerCase().includes(q) ||
-        s.learner.email.toLowerCase().includes(q) ||
-        (s.learner.phone?.toLowerCase().includes(q) ?? false),
-    );
-  }, [rosterQuery.data?.students, rosterSearch]);
 
   const invalidateRosterish = () => {
     queryClient.invalidateQueries({ queryKey: ["studio-roster", slug] });
@@ -239,20 +291,6 @@ const InstructorClassWorkspacePage = () => {
     queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
     queryClient.invalidateQueries({ queryKey: ["studio-analytics"] });
   };
-
-  const regenerateInvite = useMutation({
-    mutationFn: async () => {
-      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(slug)}/invite/regenerate`, {
-        method: "POST",
-      });
-      return parseJson<{ inviteCode: string }>(res);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["studio-invite", slug] });
-      toast.success("Invite code rotated");
-    },
-    onError: (e: Error) => toast.error(e.message || "Failed"),
-  });
 
   const bulkEnrollMut = useMutation({
     mutationFn: async () => {
@@ -295,27 +333,25 @@ const InstructorClassWorkspacePage = () => {
     onSuccess: (_d, v) => {
       queryClient.invalidateQueries({ queryKey: ["studio-roster", slug, feeYearMonth] });
       queryClient.invalidateQueries({ queryKey: ["instructor-dashboard-today"] });
-      toast.success(v.status === "PAID" ? "Marked paid" : "Marked pending", { duration: 2200 });
+      toast.success(v.status === "PAID" ? "Marked paid" : "Updated", { duration: 2000 });
     },
     onError: (e: Error) => toast.error(e.message || "Could not update fee"),
   });
 
-  const createClassSession = useMutation({
-    mutationFn: async () => {
-      const heldAt = new Date(newSessionHeldAt);
-      const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(slug)}/sessions`, {
-        method: "POST",
-        body: JSON.stringify({ heldAt: heldAt.toISOString() }),
-      });
-      return parseJson<{ session: { id: string } }>(res);
+  const saveAttendanceSilent = useMutation({
+    mutationFn: async (payload: { sessionId: string; marks: Array<{ enrollmentId: string; present: boolean }> }) => {
+      const res = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(payload.sessionId)}/attendance`,
+        { method: "PUT", body: JSON.stringify({ marks: payload.marks }) },
+      );
+      await parseJson<{ ok: boolean }>(res);
     },
-    onSuccess: (out) => {
+    onSuccess: (_d, vars) => {
+      queryClient.invalidateQueries({ queryKey: ["studio-attendance", slug, vars.sessionId] });
       queryClient.invalidateQueries({ queryKey: ["studio-sessions", slug] });
       invalidateRosterish();
-      setSelectedSessionId(out.session.id);
-      toast.success("Session added");
     },
-    onError: (e: Error) => toast.error(e.message || "Failed"),
+    onError: (e: Error) => toast.error(e.message || "Could not save attendance"),
   });
 
   const createClassSessionNow = useMutation({
@@ -330,28 +366,89 @@ const InstructorClassWorkspacePage = () => {
       queryClient.invalidateQueries({ queryKey: ["studio-sessions", slug] });
       invalidateRosterish();
       setSelectedSessionId(out.session.id);
-      toast.success("Session logged — mark attendance");
+      toast.success("Today’s session started");
     },
     onError: (e: Error) => toast.error(e.message || "Failed"),
   });
 
-  const saveAttendanceMvp = useMutation({
+  const markAllPresentThenSave = useMutation({
     mutationFn: async () => {
-      const marks = Object.entries(attendanceDraft).map(([enrollmentId, present]) => ({ enrollmentId, present }));
-      const res = await apiFetch(
-        `/api/instructor-studio/courses/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(selectedSessionId)}/attendance`,
+      let sid = selectedSessionId;
+      if (!sid) {
+        const roster = queryClient.getQueryData([
+          "studio-roster",
+          slug,
+          feeYearMonth,
+        ]) as { summary?: { todaysSessionId: string | null } } | undefined;
+        const tid = roster?.summary?.todaysSessionId;
+        if (tid) sid = tid;
+      }
+      if (!sid) {
+        const sess = queryClient.getQueryData(["studio-sessions", slug]) as
+          | { sessions: Array<{ id: string; heldAt: string }> }
+          | undefined;
+        const today = new Date();
+        const found = sess?.sessions.find((s) => {
+          const d = new Date(s.heldAt);
+          return (
+            d.getFullYear() === today.getFullYear() &&
+            d.getMonth() === today.getMonth() &&
+            d.getDate() === today.getDate()
+          );
+        });
+        if (found) sid = found.id;
+      }
+      if (!sid) {
+        const res = await apiFetch(`/api/instructor-studio/courses/${encodeURIComponent(slug)}/sessions`, {
+          method: "POST",
+          body: JSON.stringify({ heldAt: new Date().toISOString() }),
+        });
+        const out = await parseJson<{ session: { id: string } }>(res);
+        sid = out.session.id;
+        setSelectedSessionId(sid);
+        await queryClient.invalidateQueries({ queryKey: ["studio-sessions", slug] });
+        await queryClient.invalidateQueries({ queryKey: ["studio-roster", slug] });
+      }
+      const attRes = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(sid)}/attendance`,
+      );
+      const att = await parseJson<{ students: Array<{ enrollmentId: string; name: string; present: boolean }> }>(attRes);
+      const marks = att.students.map((s) => ({ enrollmentId: s.enrollmentId, present: true }));
+      const putRes = await apiFetch(
+        `/api/instructor-studio/courses/${encodeURIComponent(slug)}/sessions/${encodeURIComponent(sid)}/attendance`,
         { method: "PUT", body: JSON.stringify({ marks }) },
       );
-      await parseJson<{ ok: boolean }>(res);
+      await parseJson<{ ok: boolean }>(putRes);
+      return { sessionId: sid, marks };
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["studio-attendance", slug, selectedSessionId] });
+    onSuccess: (out) => {
+      setSelectedSessionId(out.sessionId);
+      queryClient.invalidateQueries({ queryKey: ["studio-attendance", slug, out.sessionId] });
       queryClient.invalidateQueries({ queryKey: ["studio-sessions", slug] });
       invalidateRosterish();
-      toast.success("Attendance saved");
+      setAttendanceDraft(Object.fromEntries(out.marks.map((m) => [m.enrollmentId, m.present])));
+      toast.success("Everyone marked present");
     },
     onError: (e: Error) => toast.error(e.message || "Failed"),
   });
+
+  useEffect(() => {
+    if (!selectedSessionId || !attendanceQuery.data?.students.length) return;
+    if (attendanceHydratingRef.current) return;
+    if (saveAttendanceSilent.isPending) return;
+    const marks = Object.entries(attendanceDraft).map(([enrollmentId, present]) => ({ enrollmentId, present }));
+    const server = attendanceQuery.data.students.map((s) => ({
+      enrollmentId: s.enrollmentId,
+      present: s.present,
+    }));
+    if (marks.length !== server.length) return;
+    const same = server.every((s) => attendanceDraft[s.enrollmentId] === s.present);
+    if (same) return;
+    const t = window.setTimeout(() => {
+      saveAttendanceSilent.mutate({ sessionId: selectedSessionId, marks });
+    }, 500);
+    return () => window.clearTimeout(t);
+  }, [attendanceDraft, selectedSessionId, attendanceQuery.data, saveAttendanceSilent.mutate, saveAttendanceSilent.isPending]);
 
   const postAnnouncement = useMutation({
     mutationFn: async () => {
@@ -423,6 +520,34 @@ const InstructorClassWorkspacePage = () => {
     }
   };
 
+  const totalStudents = rosterQuery.data?.summary.totalStudents ?? 0;
+  const pendingFees = rosterQuery.data?.summary.pendingFeesCount ?? 0;
+  const feeDisp = rosterQuery.data?.course.monthlyFeeDisplay ?? "";
+
+  const primaryKind: PrimaryKind = useMemo(() => {
+    if (showActivationBanner) return "activation";
+    if (totalStudents === 0) return "empty";
+    if (hasSessionToday) return "attendance";
+    if (pendingFees > 0) return "fees";
+    return "none";
+  }, [showActivationBanner, totalStudents, hasSessionToday, pendingFees]);
+
+  const inviteUrl =
+    typeof window !== "undefined" && inviteQuery.data
+      ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}`
+      : "";
+
+  const remindAllHref =
+    rosterQuery.data && pendingFees > 0
+      ? `https://wa.me/?text=${encodeURIComponent(
+          `Reminder: ${rosterQuery.data.course.monthlyFeeDisplay} for "${rosterQuery.data.course.title}" is still pending for ${rosterQuery.data.course.feeMonth}. Thank you!\n\n— ${user?.name ?? "Instructor"}`,
+        )}`
+      : "";
+
+  const scrollToAddStudent = () => {
+    addStudentAnchorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
+
   if (!ready) {
     return (
       <div className="flex justify-center py-24">
@@ -437,11 +562,74 @@ const InstructorClassWorkspacePage = () => {
     return <Navigate to="/instructor/classes" replace />;
   }
 
-  const feeDisp = rosterQuery.data?.course.monthlyFeeDisplay ?? "";
-  const inviteUrl =
-    typeof window !== "undefined" && inviteQuery.data
-      ? `${window.location.origin}/join/${inviteQuery.data.inviteCode}`
-      : "";
+  const subtitle =
+    rosterQuery.data ?
+      `${totalStudents} student${totalStudents === 1 ? "" : "s"}${feeDisp ? ` • ${feeDisp}` : ""}`
+    : "Loading…";
+
+  const announceView = panelAnnounce ? (
+    <div className="space-y-4 pb-8">
+      <Button type="button" variant="ghost" className="h-9 px-0 text-sm font-semibold -ml-1" onClick={closeAnnouncePanel}>
+        ← Back to class
+      </Button>
+      <p className="font-heading text-lg text-foreground">Message your class</p>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => applyPreset("update")}>
+          Update
+        </Button>
+        <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => applyPreset("cancel")}>
+          Cancelled
+        </Button>
+        <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => applyPreset("fee")}>
+          Fee reminder
+        </Button>
+      </div>
+      <input
+        className="w-full rounded-xl border bg-background p-2.5 text-sm"
+        placeholder="Title (optional)"
+        value={announceTitle}
+        onChange={(e) => setAnnounceTitle(e.target.value)}
+      />
+      <textarea
+        className="w-full rounded-xl border bg-background p-3 text-sm min-h-[100px]"
+        placeholder="Message (10+ characters)"
+        value={announceBody}
+        onChange={(e) => setAnnounceBody(e.target.value)}
+      />
+      <label className="flex items-center gap-2 text-xs text-muted-foreground">
+        <input type="checkbox" checked={announceEmailLearners} onChange={(e) => setAnnounceEmailLearners(e.target.checked)} />
+        Email learners
+      </label>
+      <Button
+        type="button"
+        className="rounded-full h-12 w-full"
+        disabled={postAnnouncement.isPending || announceBody.trim().length < 10}
+        onClick={() => postAnnouncement.mutate()}
+      >
+        Post to Classroom
+      </Button>
+      <Button
+        type="button"
+        className="rounded-full h-12 w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+        disabled={announceBody.trim().length < 10}
+        onClick={() => void postAnnouncementShareWhatsApp()}
+      >
+        <MessageCircle className="mr-2 h-4 w-4 inline" />
+        Post + WhatsApp
+      </Button>
+      <ul className="space-y-2 pt-2">
+        {studioAnnouncementsQuery.data?.announcements.map((a) => (
+          <li key={a.id} className="rounded-xl border p-3 text-sm">
+            {a.title ? <p className="font-medium">{a.title}</p> : null}
+            <p className="text-xs text-muted-foreground">
+              {a.author.name} · {new Date(a.createdAt).toLocaleString()}
+            </p>
+            <p className="mt-2 whitespace-pre-wrap text-sm">{a.body}</p>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : null;
 
   return (
     <div className="min-h-full flex flex-col">
@@ -455,564 +643,378 @@ const InstructorClassWorkspacePage = () => {
             </Button>
             <div className="min-w-0 flex-1">
               <h1 className="font-heading text-lg leading-tight truncate">{courseTitle ?? rosterQuery.data?.course.title ?? "Class"}</h1>
-              <p className="text-[11px] text-muted-foreground font-body truncate">
-                {rosterQuery.data ? (
-                  <>
-                    {rosterQuery.data.summary.totalStudents} students
-                    {feeDisp ? ` · ${feeDisp}` : ""}
-                  </>
-                ) : (
-                  "Loading…"
-                )}
-              </p>
+              <p className="text-[11px] text-muted-foreground font-body truncate">{subtitle}</p>
             </div>
           </div>
-          <div className="flex gap-1 overflow-x-auto pb-2 -mx-1 px-1 scrollbar-none">
-            {TAB_IDS.map(({ id, label }) => {
-              const pendingFees = rosterQuery.data?.summary.pendingFeesCount ?? 0;
-              const showFeeDot = id === "fees" && pendingFees > 0;
-              return (
-                <button
-                  key={id}
-                  type="button"
-                  onClick={() => setTab(id)}
-                  className={cn(
-                    "relative shrink-0 rounded-full px-3.5 py-2 text-xs font-semibold font-body transition-all duration-150",
-                    tab === id ? "bg-foreground text-background scale-[1.02]" : "bg-muted/60 text-muted-foreground hover:text-foreground",
-                  )}
-                >
-                  {label}
-                  {showFeeDot ? (
-                    <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-amber-500 ring-2 ring-background" aria-hidden />
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+          {!panelAnnounce ? (
+            <div className="flex gap-1 pb-2 -mx-1 px-1">
+              {TAB_IDS.map(({ id, label }) => {
+                const showFeeDot = id === "fees" && pendingFees > 0;
+                return (
+                  <button
+                    key={id}
+                    type="button"
+                    onClick={() => setTab(id)}
+                    className={cn(
+                      "relative flex-1 rounded-xl py-2.5 text-xs font-semibold font-body transition-all duration-150",
+                      tab === id ? "bg-foreground text-background" : "bg-muted/60 text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    {label}
+                    {showFeeDot ? (
+                      <span
+                        className="absolute top-1 right-1.5 h-1.5 w-1.5 rounded-full bg-amber-500 ring-2 ring-background"
+                        aria-hidden
+                      />
+                    ) : null}
+                  </button>
+                );
+              })}
+            </div>
+          ) : null}
         </div>
       </header>
 
       <div className="container mx-auto max-w-lg px-4 py-4 flex-1">
-        {tab === "students" && (
-          <div className="space-y-4">
-            <p className="text-sm font-medium text-foreground font-body">What to do next</p>
-            {inviteUrl ? (
-              <Button className="rounded-full h-12 w-full text-base" asChild>
-                <a
-                  href={`https://wa.me/?text=${encodeURIComponent(`Join my class:\n${inviteUrl}`)}`}
-                  target="_blank"
-                  rel="noreferrer"
+        {panelAnnounce ? (
+          announceView
+        ) : (
+          <>
+            {primaryKind === "activation" ? (
+              <div className="relative rounded-2xl border-2 border-emerald-500/40 bg-gradient-to-b from-emerald-500/15 to-card/90 px-4 py-4 pr-11 shadow-sm mb-4">
+                <button
+                  type="button"
+                  onClick={dismissActivationBanner}
+                  className="absolute top-3 right-3 rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+                  aria-label="Dismiss"
                 >
-                  <MessageCircle className="mr-2 h-5 w-5 inline" aria-hidden />
-                  Share invite on WhatsApp
-                </a>
-              </Button>
-            ) : (
-              <Button className="rounded-full h-12 w-full text-base" disabled>
-                <MessageCircle className="mr-2 h-5 w-5 inline" aria-hidden />
-                Share invite on WhatsApp
-              </Button>
-            )}
+                  <X className="h-4 w-4" />
+                </button>
+                <p className="font-heading text-lg text-foreground pr-2">Your class is ready 🎉</p>
+                <p className="text-sm text-foreground font-body mt-2 font-medium">Add your first 3 students</p>
+                <div className="flex flex-col gap-2 mt-4">
+                  {inviteUrl ? (
+                    <Button className="w-full rounded-xl h-11 text-sm font-semibold bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
+                      <a href={`https://wa.me/?text=${encodeURIComponent(`Join my class:\n${inviteUrl}`)}`} target="_blank" rel="noreferrer">
+                        <MessageCircle className="inline mr-2 h-4 w-4" aria-hidden />
+                        Share invite
+                      </a>
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full rounded-xl h-11 text-sm font-semibold"
+                    onClick={() => {
+                      setTab("students");
+                      queueMicrotask(scrollToAddStudent);
+                    }}
+                  >
+                    Add student
+                  </Button>
+                </div>
+              </div>
+            ) : primaryKind === "empty" ? (
+              <div className="rounded-2xl border border-border/80 bg-card px-4 py-4 mb-4 shadow-sm">
+                <p className="text-sm font-semibold text-foreground font-body">No students yet</p>
+                <div className="flex flex-col gap-2 mt-3">
+                  {inviteUrl ? (
+                    <Button className="w-full rounded-xl h-11 text-sm font-semibold" asChild>
+                      <a href={`https://wa.me/?text=${encodeURIComponent(`Join my class:\n${inviteUrl}`)}`} target="_blank" rel="noreferrer">
+                        Share invite
+                      </a>
+                    </Button>
+                  ) : null}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="w-full rounded-xl h-11 text-sm font-semibold"
+                    onClick={() => {
+                      setTab("students");
+                      queueMicrotask(scrollToAddStudent);
+                    }}
+                  >
+                    Add student
+                  </Button>
+                </div>
+              </div>
+            ) : primaryKind === "attendance" ? (
+              <div className="rounded-2xl border border-border/80 bg-card px-4 py-4 mb-4 shadow-sm">
+                <p className="text-sm font-semibold text-foreground font-body">Mark attendance for today</p>
+                <Button
+                  type="button"
+                  className="w-full rounded-xl h-11 text-sm font-semibold mt-3 bg-emerald-600 hover:bg-emerald-700 text-white"
+                  disabled={markAllPresentThenSave.isPending || totalStudents === 0}
+                  onClick={() => markAllPresentThenSave.mutate()}
+                >
+                  {markAllPresentThenSave.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : "Mark all present"}
+                </Button>
+              </div>
+            ) : primaryKind === "fees" ? (
+              <div className="rounded-2xl border border-amber-500/40 bg-amber-500/[0.08] dark:bg-amber-950/30 px-4 py-4 mb-4">
+                <p className="text-sm font-semibold text-foreground font-body">
+                  {pendingFees} student{pendingFees === 1 ? "" : "s"} pending fees
+                </p>
+                {remindAllHref ? (
+                  <Button className="w-full rounded-xl h-11 text-sm font-semibold mt-3" variant="secondary" asChild>
+                    <a href={remindAllHref} target="_blank" rel="noreferrer">
+                      Remind
+                    </a>
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
 
-            <div className="rounded-2xl border border-border/60 bg-card/70 p-4 space-y-3">
-              <p className="text-xs font-semibold text-foreground">Invite link</p>
-              {inviteQuery.isLoading ? <Loader2 className="animate-spin h-5 w-5 text-accent" /> : null}
-              {inviteQuery.data ? (
-                <>
-                  <code className="block text-xs font-mono bg-muted/50 rounded-lg px-3 py-2 break-all">{inviteUrl}</code>
-                  <div className="flex flex-wrap gap-2">
+            {tab === "attendance" && (
+              <div className="space-y-4 pb-8">
+                <p className="text-sm font-semibold text-foreground font-body">Mark attendance for today</p>
+                {!hasSessionToday && totalStudents > 0 ? (
+                  <Button
+                    type="button"
+                    className="w-full rounded-xl h-12 text-sm font-semibold"
+                    disabled={createClassSessionNow.isPending}
+                    onClick={() => createClassSessionNow.mutate()}
+                  >
+                    {createClassSessionNow.isPending ? <Loader2 className="animate-spin h-5 w-5" /> : "Start today’s session"}
+                  </Button>
+                ) : null}
+                {selectedSessionId && attendanceQuery.isLoading ? (
+                  <div className="flex justify-center py-6">
+                    <Loader2 className="animate-spin text-accent h-6 w-6" />
+                  </div>
+                ) : null}
+                {selectedSessionId && attendanceQuery.data && attendanceQuery.data.students.length > 0 ? (
+                  <div className="space-y-3">
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="rounded-full"
+                      className="w-full rounded-xl h-11 text-sm font-semibold border-2"
+                      disabled={saveAttendanceSilent.isPending}
                       onClick={() => {
-                        void navigator.clipboard.writeText(inviteUrl);
-                        toast.success("Copied");
+                        const next: Record<string, boolean> = {};
+                        for (const st of attendanceQuery.data!.students) next[st.enrollmentId] = true;
+                        setAttendanceDraft(next);
                       }}
                     >
-                      Copy
+                      Mark all present
                     </Button>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="rounded-full"
-                      disabled={regenerateInvite.isPending}
-                      onClick={() => regenerateInvite.mutate()}
-                    >
-                      New code
-                    </Button>
+                    <ul className="space-y-2">
+                      {attendanceQuery.data.students.map((s) => (
+                        <li
+                          key={s.enrollmentId}
+                          className="flex items-center justify-between gap-3 rounded-2xl border bg-card/80 px-3 py-3"
+                        >
+                          <span className="text-sm font-semibold font-body min-w-0 truncate">{s.name}</span>
+                          <div className="flex rounded-full border-2 border-border p-1 bg-muted/40 shrink-0">
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded-full px-3 py-1.5 text-xs font-bold transition-all active:scale-95 sm:px-4 sm:text-sm",
+                                (attendanceDraft[s.enrollmentId] ?? false)
+                                  ? "bg-emerald-600 text-white shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground",
+                              )}
+                              onClick={() => setAttendanceDraft((p) => ({ ...p, [s.enrollmentId]: true }))}
+                            >
+                              Present
+                            </button>
+                            <button
+                              type="button"
+                              className={cn(
+                                "rounded-full px-3 py-1.5 text-xs font-bold transition-all active:scale-95 sm:px-4 sm:text-sm",
+                                !(attendanceDraft[s.enrollmentId] ?? false)
+                                  ? "bg-foreground text-background shadow-sm"
+                                  : "text-muted-foreground hover:text-foreground",
+                              )}
+                              onClick={() => setAttendanceDraft((p) => ({ ...p, [s.enrollmentId]: false }))}
+                            >
+                              Absent
+                            </button>
+                          </div>
+                        </li>
+                      ))}
+                    </ul>
+                    <p className="text-[11px] text-muted-foreground text-center font-body">Saves automatically</p>
                   </div>
-                </>
-              ) : null}
-            </div>
-
-            <div className="rounded-2xl border border-dashed border-accent/40 p-4 space-y-3">
-              <div className="flex items-start gap-2">
-                <UserPlus className="h-5 w-5 text-accent shrink-0" />
-                <div>
-                  <p className="text-sm font-semibold">Bulk add</p>
-                  <p className="text-[11px] text-muted-foreground font-body mt-1">One email or phone per line (account must exist).</p>
-                </div>
+                ) : null}
+                {hasSessionToday && totalStudents === 0 ? (
+                  <p className="text-sm text-muted-foreground font-body">Add students to take attendance.</p>
+                ) : null}
               </div>
-              <textarea
-                className="w-full min-h-[80px] rounded-xl border bg-background p-3 text-sm"
-                placeholder="email or phone per line"
-                value={bulkEnrollInput}
-                onChange={(e) => setBulkEnrollInput(e.target.value)}
-              />
-              <Button type="button" className="rounded-full" disabled={bulkEnrollMut.isPending} onClick={() => bulkEnrollMut.mutate()}>
-                {bulkEnrollMut.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : "Add to class"}
-              </Button>
-              <div className="border-t pt-3 space-y-2">
-                <p className="text-[11px] font-semibold">Names only → WhatsApp</p>
-                <textarea
-                  className="w-full min-h-[64px] rounded-xl border bg-background p-3 text-sm"
-                  placeholder="One name per line"
-                  value={bulkNamesInput}
-                  onChange={(e) => setBulkNamesInput(e.target.value)}
-                />
-                <Button
-                  type="button"
-                  variant="secondary"
-                  className="rounded-full"
-                  disabled={!inviteQuery.data}
-                  onClick={() => {
-                    const names = bulkNamesInput.split(/[\r\n]+/).map((s) => s.trim()).filter(Boolean);
-                    if (!inviteQuery.data || names.length === 0) {
-                      toast.error("Add names and wait for invite link.");
-                      return;
-                    }
-                    const title = rosterQuery.data?.course.title ?? "my class";
-                    const body = `Join "${title}":\n${inviteUrl}\n\n${names.map((n, i) => `${i + 1}. ${n}`).join("\n")}`;
-                    window.open(`https://wa.me/?text=${encodeURIComponent(body)}`, "_blank", "noopener,noreferrer");
-                  }}
-                >
-                  Open WhatsApp
-                </Button>
-              </div>
-            </div>
+            )}
 
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <input
-                type="search"
-                className="w-full rounded-xl border bg-background pl-9 pr-3 py-2.5 text-sm"
-                placeholder="Search students"
-                value={rosterSearch}
-                onChange={(e) => setRosterSearch(e.target.value)}
-              />
-            </div>
-
-            {rosterQuery.isLoading ? <Loader2 className="animate-spin text-accent" /> : null}
-            <ul className="space-y-3">
-              {filteredStudents.map((row) => {
-                const first = row.learner.name.split(" ")[0] ?? row.learner.name;
-                const title = rosterQuery.data?.course.title ?? "class";
-                const feeLine = rosterQuery.data?.course.monthlyFeeDisplay ?? "Monthly fee";
-                const waFee = `https://wa.me/?text=${encodeURIComponent(
-                  `Hi ${first} — friendly reminder: ${feeLine} for "${title}" (${feeYearMonth}) is still pending. Thank you!`,
-                )}`;
-                const waQuick = `https://wa.me/?text=${encodeURIComponent(`Hi ${first} — quick note about ${title}.`)}`;
-                return (
-                  <li
-                    key={row.enrollmentId}
-                    className={cn(
-                      "rounded-2xl border bg-card px-3 py-3 flex flex-col gap-3 transition-shadow",
-                      row.feeStatus === "PENDING" && "border-amber-500/40 shadow-[0_0_0_1px_rgba(245,158,11,0.12)]",
-                    )}
-                  >
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-foreground font-body">{row.learner.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{row.learner.email}</p>
-                      </div>
-                      <span
-                        className={cn(
-                          "shrink-0 text-[11px] font-bold rounded-full px-2.5 py-1",
-                          row.feeStatus === "PAID" ? "bg-emerald-500/15 text-emerald-700" : "bg-amber-500/20 text-amber-900",
-                        )}
-                      >
-                        {row.feeStatus === "PAID" ? "Paid" : "Pending"}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {row.feeStatus === "PENDING" ? (
-                        <Button type="button" size="sm" className="rounded-full h-10 text-sm bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
-                          <a href={waFee} target="_blank" rel="noreferrer">
-                            <MessageCircle className="mr-1.5 h-4 w-4 inline" />
-                            Remind
-                          </a>
-                        </Button>
-                      ) : (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="secondary"
-                          className="rounded-full h-10 text-sm"
-                          onClick={() => {
-                            setTab("attendance");
-                            toast.message("Mark attendance", { description: "Pick today’s session, then tap Present or Absent." });
-                          }}
-                        >
-                          Mark roll
-                        </Button>
-                      )}
-                      <Button type="button" size="sm" variant="outline" className="rounded-full h-10 text-sm" asChild>
-                        <a href={waQuick} target="_blank" rel="noreferrer">
-                          Message
-                        </a>
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={row.feeStatus === "PAID" ? "default" : "outline"}
-                        className="rounded-full h-10 text-xs"
-                        disabled={saveFeeOne.isPending}
-                        onClick={() => row.feeStatus !== "PAID" && saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PAID" })}
-                      >
-                        Paid
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={row.feeStatus === "PENDING" ? "secondary" : "outline"}
-                        className="rounded-full h-10 text-xs"
-                        disabled={saveFeeOne.isPending}
-                        onClick={() => row.feeStatus !== "PENDING" && saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PENDING" })}
-                      >
-                        Pending
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-
-        {tab === "attendance" && (
-          <div className="space-y-4 pb-4">
-            <div>
-              <h2 className="font-heading text-lg text-foreground">Mark attendance for today</h2>
-              <p className="text-xs text-muted-foreground font-body mt-1">Tap big buttons — finish in seconds.</p>
-            </div>
-
-            {rosterQuery.data && rosterQuery.data.summary.pendingFeesCount > 0 ? (
-              <div className="rounded-2xl border border-amber-500/35 bg-amber-500/10 p-4 flex flex-col gap-2 animate-in fade-in slide-in-from-bottom-1 duration-200">
-                <p className="text-sm font-semibold text-foreground">
-                  {rosterQuery.data.summary.pendingFeesCount} fee{rosterQuery.data.summary.pendingFeesCount === 1 ? "" : "s"} pending
-                </p>
-                <p className="text-xs text-muted-foreground font-body">Collect or remind in Fees when you’re done here.</p>
-                <Button type="button" variant="outline" size="sm" className="rounded-full h-10 w-fit" onClick={() => setTab("fees")}>
-                  Go to Fees
-                </Button>
+            {tab === "fees" && rosterQuery.isLoading ? (
+              <div className="flex justify-center py-12">
+                <Loader2 className="animate-spin text-accent h-8 w-8" />
               </div>
             ) : null}
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                className="rounded-full h-12 text-sm font-semibold"
-                disabled={createClassSessionNow.isPending}
-                onClick={() => createClassSessionNow.mutate()}
-              >
-                <CalendarClock className="mr-2 h-5 w-5 inline" />
-                Class happening now
-              </Button>
-              {sessionsToday[0] ? (
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="rounded-full h-12 text-sm font-semibold"
-                  onClick={() => setSelectedSessionId(sessionsToday[0]!.id)}
-                >
-                  Use today&apos;s session
-                </Button>
-              ) : null}
-            </div>
-            <div className="rounded-2xl border border-border/60 bg-muted/20 p-3 space-y-2">
-              <label className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">Add session</label>
-              <input
-                type="datetime-local"
-                className="w-full rounded-xl border bg-background px-3 py-2.5 text-sm"
-                value={newSessionHeldAt}
-                onChange={(e) => setNewSessionHeldAt(e.target.value)}
-              />
-              <Button
-                type="button"
-                size="sm"
-                className="rounded-full"
-                disabled={createClassSession.isPending}
-                onClick={() => createClassSession.mutate()}
-              >
-                Add session
-              </Button>
-            </div>
-            <div>
-              <label className="text-xs font-semibold text-foreground">Session</label>
-              <select
-                className="mt-1.5 w-full rounded-xl border bg-background px-3 py-3 text-sm font-medium"
-                value={selectedSessionId}
-                onChange={(e) => setSelectedSessionId(e.target.value)}
-              >
-                <option value="">Select session</option>
-                {(sessionsQuery.data?.sessions ?? []).map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {new Date(s.heldAt).toLocaleString()}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {selectedSessionId && attendanceQuery.isLoading ? <Loader2 className="animate-spin text-accent h-6 w-6" /> : null}
-            {selectedSessionId && attendanceQuery.data ? (
-              <div className="space-y-4">
-                <div className="grid grid-cols-1 gap-2">
-                  <Button
-                    type="button"
-                    className="rounded-2xl h-14 text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm active:scale-[0.99] transition-transform"
-                    onClick={() => {
-                      const next: Record<string, boolean> = {};
-                      for (const st of attendanceQuery.data!.students) next[st.enrollmentId] = true;
-                      setAttendanceDraft(next);
-                      toast.message("Everyone marked present", { description: "Tap Save attendance to record." });
-                    }}
-                  >
-                    Mark all present
-                  </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="rounded-2xl h-12 text-sm font-semibold border-2 active:scale-[0.99] transition-transform"
-                    onClick={() => {
-                      const next: Record<string, boolean> = {};
-                      for (const st of attendanceQuery.data!.students) next[st.enrollmentId] = false;
-                      setAttendanceDraft(next);
-                    }}
-                  >
-                    Mark all absent
-                  </Button>
-                </div>
-                <ul className="space-y-3">
-                  {attendanceQuery.data.students.map((s) => (
-                    <li
-                      key={s.enrollmentId}
-                      className="flex items-center justify-between gap-3 rounded-2xl border bg-card/80 px-3 py-3"
-                    >
-                      <span className="text-sm font-semibold font-body min-w-0 truncate">{s.name}</span>
-                      <div className="flex rounded-full border-2 border-border p-1 bg-muted/40 shrink-0">
-                        <button
-                          type="button"
-                          className={cn(
-                            "rounded-full px-4 py-2 text-sm font-bold transition-all active:scale-95",
-                            (attendanceDraft[s.enrollmentId] ?? false)
-                              ? "bg-emerald-600 text-white shadow-sm"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                          onClick={() => setAttendanceDraft((p) => ({ ...p, [s.enrollmentId]: true }))}
-                        >
-                          Present
-                        </button>
-                        <button
-                          type="button"
-                          className={cn(
-                            "rounded-full px-4 py-2 text-sm font-bold transition-all active:scale-95",
-                            !(attendanceDraft[s.enrollmentId] ?? false)
-                              ? "bg-foreground text-background shadow-sm"
-                              : "text-muted-foreground hover:text-foreground",
-                          )}
-                          onClick={() => setAttendanceDraft((p) => ({ ...p, [s.enrollmentId]: false }))}
-                        >
-                          Absent
-                        </button>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-                <div className="sticky bottom-20 z-30 -mx-1 px-1 pt-2 pb-1 bg-gradient-to-t from-background via-background to-transparent">
-                  <Button
-                    type="button"
-                    className="rounded-2xl h-14 w-full text-base font-bold shadow-lg active:scale-[0.99] transition-transform"
-                    disabled={saveAttendanceMvp.isPending || attendanceQuery.data.students.length === 0}
-                    onClick={() => saveAttendanceMvp.mutate()}
-                  >
-                    {saveAttendanceMvp.isPending ? <Loader2 className="animate-spin h-5 w-5" /> : "Save attendance"}
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-        )}
-
-        {tab === "fees" && rosterQuery.isLoading ? (
-          <div className="flex justify-center py-12">
-            <Loader2 className="animate-spin text-accent h-8 w-8" />
-          </div>
-        ) : null}
-        {tab === "fees" && rosterQuery.data && (
-          <div className="space-y-4">
-            <div className="rounded-2xl border-2 border-border bg-card p-4 space-y-3 shadow-sm">
-              <div className="flex items-baseline justify-between gap-2">
+            {tab === "fees" && rosterQuery.data ? (
+              <div className="space-y-4 pb-8">
                 <div>
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">{formatFeeMonthLabel(feeYearMonth)} fees</p>
-                  <p className="font-heading text-xl mt-1">Money this month</p>
-                </div>
-              </div>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="rounded-xl bg-muted/50 py-3 px-2">
-                  <p className="text-[10px] font-semibold text-muted-foreground uppercase">Total</p>
-                  <p className="text-lg font-bold tabular-nums">{rosterQuery.data.students.length}</p>
-                </div>
-                <div className="rounded-xl bg-emerald-500/10 py-3 px-2">
-                  <p className="text-[10px] font-semibold text-emerald-800 uppercase">Paid</p>
-                  <p className="text-lg font-bold tabular-nums text-emerald-700">
-                    {rosterQuery.data.students.filter((s) => s.feeStatus === "PAID").length}
+                  <p className="font-heading text-base text-foreground">{formatFeeMonthLabel(feeYearMonth)} fees</p>
+                  <p className="text-sm text-muted-foreground font-body mt-1">
+                    Paid: {rosterQuery.data.students.filter((s) => s.feeStatus === "PAID").length} · Pending:{" "}
+                    {rosterQuery.data.summary.pendingFeesCount}
                   </p>
                 </div>
-                <div className="rounded-xl bg-amber-500/15 py-3 px-2">
-                  <p className="text-[10px] font-semibold text-amber-900 uppercase">Pending</p>
-                  <p className="text-lg font-bold tabular-nums text-amber-900">{rosterQuery.data.summary.pendingFeesCount}</p>
+                {rosterQuery.data.summary.pendingFeesCount > 0 && remindAllHref ? (
+                  <Button className="rounded-xl h-11 w-full text-sm font-semibold" asChild>
+                    <a href={remindAllHref} target="_blank" rel="noreferrer">
+                      <MessageCircle className="mr-2 h-4 w-4 inline" />
+                      Remind all
+                    </a>
+                  </Button>
+                ) : null}
+                <details className="rounded-xl border border-border/50 bg-muted/15 px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-muted-foreground py-1 list-none font-body">
+                    Different month
+                  </summary>
+                  <input
+                    type="month"
+                    className="rounded-lg border bg-background px-3 py-2 text-sm w-full max-w-[14rem] mt-2"
+                    value={feeYearMonth}
+                    onChange={(e) => setFeeYearMonth(e.target.value)}
+                  />
+                </details>
+                <ul className="space-y-2">
+                  {rosterQuery.data.students.map((row) => {
+                    const first = row.learner.name.split(" ")[0] ?? row.learner.name;
+                    const waOne = `https://wa.me/?text=${encodeURIComponent(
+                      `Hi ${first} — reminder: ${rosterQuery.data!.course.monthlyFeeDisplay} for "${rosterQuery.data!.course.title}" (${feeYearMonth}) is pending. Thank you!`,
+                    )}`;
+                    return (
+                      <li
+                        key={row.enrollmentId}
+                        className={cn(
+                          "rounded-xl border px-3 py-3 flex flex-col gap-2",
+                          row.feeStatus === "PENDING" && "border-amber-500/35 bg-amber-500/[0.06]",
+                        )}
+                      >
+                        <div className="flex items-center justify-between gap-2 min-w-0">
+                          <p className="font-semibold text-sm truncate">{row.learner.name}</p>
+                          <span
+                            className={cn(
+                              "shrink-0 text-xs font-bold",
+                              row.feeStatus === "PAID" ? "text-emerald-600" : "text-amber-800 dark:text-amber-200",
+                            )}
+                          >
+                            {row.feeStatus === "PAID" ? "Paid" : "Pending"}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {row.feeStatus === "PENDING" ? (
+                            <>
+                              <Button
+                                type="button"
+                                size="sm"
+                                className="rounded-lg h-9 text-xs flex-1 min-w-[6rem]"
+                                disabled={saveFeeOne.isPending}
+                                onClick={() => saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PAID" })}
+                              >
+                                Mark paid
+                              </Button>
+                              <Button type="button" size="sm" variant="outline" className="rounded-lg h-9 text-xs flex-1 min-w-[6rem]" asChild>
+                                <a href={waOne} target="_blank" rel="noreferrer">
+                                  Remind
+                                </a>
+                              </Button>
+                            </>
+                          ) : (
+                            <p className="text-xs text-muted-foreground font-body">Paid for this month</p>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            ) : null}
+
+            {tab === "students" && (
+              <div className="space-y-4 pb-8">
+                <div className="flex flex-col gap-2">
+                  <Button className="w-full rounded-xl h-11 text-sm font-semibold" variant="secondary" asChild={Boolean(inviteUrl)} disabled={!inviteUrl}>
+                    {inviteUrl ? (
+                      <a href={`https://wa.me/?text=${encodeURIComponent(`Join my class:\n${inviteUrl}`)}`} target="_blank" rel="noreferrer">
+                        Share invite
+                      </a>
+                    ) : (
+                      <span>Share invite</span>
+                    )}
+                  </Button>
+                </div>
+
+                <div ref={addStudentAnchorRef} className="rounded-xl border border-border/60 bg-muted/15 p-3 space-y-2 scroll-mt-24">
+                  <p className="text-xs font-semibold text-foreground font-body">Add student</p>
+                  <textarea
+                    className="w-full min-h-[64px] rounded-lg border bg-background p-3 text-sm"
+                    placeholder="Email or phone, one per line"
+                    value={bulkEnrollInput}
+                    onChange={(e) => setBulkEnrollInput(e.target.value)}
+                  />
+                  <Button
+                    type="button"
+                    className="w-full rounded-xl h-11 text-sm font-semibold"
+                    disabled={bulkEnrollMut.isPending}
+                    onClick={() => bulkEnrollMut.mutate()}
+                  >
+                    {bulkEnrollMut.isPending ? <Loader2 className="animate-spin h-4 w-4" /> : "Add to class"}
+                  </Button>
+                </div>
+
+                {rosterQuery.isLoading ? (
+                  <div className="flex justify-center py-8">
+                    <Loader2 className="animate-spin h-6 w-6 text-accent" />
+                  </div>
+                ) : rosterQuery.data && rosterQuery.data.students.length === 0 ? (
+                  <p className="text-sm text-muted-foreground text-center py-6 font-body">Nobody enrolled yet.</p>
+                ) : (
+                  <ul className="space-y-2">
+                    {rosterQuery.data?.students.map((row) => (
+                      <li
+                        key={row.enrollmentId}
+                        className={cn(
+                          "rounded-xl border bg-card px-3 py-3 flex items-center justify-between gap-2",
+                          row.feeStatus === "PENDING" && "border-amber-500/30",
+                        )}
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-semibold truncate">{row.learner.name}</p>
+                          <p className="text-xs text-muted-foreground font-body mt-0.5">{feeDisp || "—"}</p>
+                        </div>
+                        <span
+                          className={cn(
+                            "shrink-0 text-xs font-bold rounded-full px-2 py-1",
+                            row.feeStatus === "PAID"
+                              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-300"
+                              : "bg-amber-500/15 text-amber-800 dark:text-amber-200",
+                          )}
+                        >
+                          {row.feeStatus === "PAID" ? "Paid" : "Due"}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
+                <div className="pt-2 border-t border-border/40 space-y-2">
+                  <button
+                    type="button"
+                    className="text-xs font-semibold text-accent hover:underline w-full text-left"
+                    onClick={openAnnouncePanel}
+                  >
+                    Message class
+                  </button>
+                  <Link
+                    to="/instructor/more"
+                    className="block text-xs font-semibold text-muted-foreground hover:text-foreground hover:underline"
+                  >
+                    More — curriculum, analytics, profile
+                  </Link>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground font-body">{rosterQuery.data.course.monthlyFeeDisplay} per student · month {feeYearMonth}</p>
-              {rosterQuery.data.summary.pendingFeesCount > 0 ? (
-                <Button className="rounded-full h-12 w-full text-base font-semibold bg-emerald-600 hover:bg-emerald-700 text-white" asChild>
-                  <a
-                    href={`https://wa.me/?text=${encodeURIComponent(
-                      `Reminder: ${rosterQuery.data.course.monthlyFeeDisplay} for "${rosterQuery.data.course.title}" is still pending for ${rosterQuery.data.course.feeMonth}. Thank you!\n\n— ${user?.name ?? "Instructor"}`,
-                    )}`}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    <MessageCircle className="mr-2 h-5 w-5 inline" />
-                    Remind all
-                  </a>
-                </Button>
-              ) : (
-                <p className="text-sm font-medium text-emerald-700 text-center py-2">All caught up for this month.</p>
-              )}
-            </div>
-            <label className="text-xs text-muted-foreground block">Change fee month</label>
-            <input
-              type="month"
-              className="rounded-xl border bg-background px-3 py-2.5 text-sm w-full max-w-[14rem]"
-              value={feeYearMonth}
-              onChange={(e) => setFeeYearMonth(e.target.value)}
-            />
-            <ul className="space-y-2">
-              {rosterQuery.data.students.map((row) => {
-                const first = row.learner.name.split(" ")[0] ?? row.learner.name;
-                const waOne = `https://wa.me/?text=${encodeURIComponent(
-                  `Hi ${first} — reminder: ${rosterQuery.data!.course.monthlyFeeDisplay} for "${rosterQuery.data!.course.title}" (${feeYearMonth}) is pending. Thank you!`,
-                )}`;
-                return (
-                  <li
-                    key={row.enrollmentId}
-                    className={cn(
-                      "rounded-xl border px-3 py-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between",
-                      row.feeStatus === "PENDING" && "border-amber-500/35 bg-amber-500/[0.06]",
-                    )}
-                  >
-                    <div className="min-w-0">
-                      <p className="font-semibold text-sm truncate">{row.learner.name}</p>
-                      <p className={cn("text-xs font-bold", row.feeStatus === "PAID" ? "text-emerald-600" : "text-amber-800")}>
-                        {row.feeStatus === "PAID" ? "Paid" : "Pending"}
-                      </p>
-                    </div>
-                    <div className="flex flex-wrap gap-2 shrink-0">
-                      {row.feeStatus === "PENDING" ? (
-                        <Button type="button" size="sm" variant="secondary" className="rounded-full h-9 text-xs" asChild>
-                          <a href={waOne} target="_blank" rel="noreferrer">
-                            Remind
-                          </a>
-                        </Button>
-                      ) : null}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant={row.feeStatus === "PAID" ? "default" : "outline"}
-                        className="rounded-full h-9 text-xs"
-                        disabled={saveFeeOne.isPending}
-                        onClick={() => row.feeStatus !== "PAID" && saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PAID" })}
-                      >
-                        Paid
-                      </Button>
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="rounded-full h-9 text-xs"
-                        disabled={saveFeeOne.isPending}
-                        onClick={() => row.feeStatus !== "PENDING" && saveFeeOne.mutate({ enrollmentId: row.enrollmentId, status: "PENDING" })}
-                      >
-                        Pending
-                      </Button>
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </div>
-        )}
-
-        {tab === "announce" && (
-          <div className="space-y-4">
-            <p className="text-sm font-medium text-foreground font-body">Message your class</p>
-            <div className="flex flex-wrap gap-2">
-              <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => applyPreset("update")}>
-                Update
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => applyPreset("cancel")}>
-                Cancelled
-              </Button>
-              <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => applyPreset("fee")}>
-                Fee reminder
-              </Button>
-            </div>
-            <input
-              className="w-full rounded-xl border bg-background p-2.5 text-sm"
-              placeholder="Title (optional)"
-              value={announceTitle}
-              onChange={(e) => setAnnounceTitle(e.target.value)}
-            />
-            <textarea
-              className="w-full rounded-xl border bg-background p-3 text-sm min-h-[100px]"
-              placeholder="Message (10+ characters)"
-              value={announceBody}
-              onChange={(e) => setAnnounceBody(e.target.value)}
-            />
-            <label className="flex items-center gap-2 text-xs text-muted-foreground">
-              <input type="checkbox" checked={announceEmailLearners} onChange={(e) => setAnnounceEmailLearners(e.target.checked)} />
-              Email learners (SMTP)
-            </label>
-            <Button
-              type="button"
-              className="rounded-full h-12 w-full"
-              disabled={postAnnouncement.isPending || announceBody.trim().length < 10}
-              onClick={() => postAnnouncement.mutate()}
-            >
-              Post to Classroom
-            </Button>
-            <Button
-              type="button"
-              className="rounded-full h-12 w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-              disabled={announceBody.trim().length < 10}
-              onClick={() => void postAnnouncementShareWhatsApp()}
-            >
-              <MessageCircle className="mr-2 h-4 w-4 inline" />
-              Post + WhatsApp
-            </Button>
-            <ul className="space-y-2 pt-4">
-              {studioAnnouncementsQuery.data?.announcements.map((a) => (
-                <li key={a.id} className="rounded-xl border p-3 text-sm">
-                  {a.title ? <p className="font-medium">{a.title}</p> : null}
-                  <p className="text-xs text-muted-foreground">{a.author.name} · {new Date(a.createdAt).toLocaleString()}</p>
-                  <p className="mt-2 whitespace-pre-wrap text-sm">{a.body}</p>
-                </li>
-              ))}
-            </ul>
-          </div>
+            )}
+          </>
         )}
       </div>
     </div>

@@ -82,7 +82,7 @@ const HeroSection = () => {
               {mvp && !user ? (
                 <div className="mt-8 flex flex-col sm:flex-row flex-wrap gap-3">
                   <Link
-                    to={`/login?mode=register&role=instructor&next=${encodeURIComponent(
+                    to={`/login?next=${encodeURIComponent(
                       "/instructor/studio?setup=1#studio-create-class",
                     )}`}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background px-6 py-3.5 text-sm font-medium hover:opacity-90 transition-opacity text-center"

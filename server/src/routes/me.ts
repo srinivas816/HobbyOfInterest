@@ -5,7 +5,7 @@ import { prisma } from "../lib/prisma.js";
 import { shouldExposeDemoOtp } from "../lib/demoOtp.js";
 import { normalizePhone } from "../lib/phone.js";
 import { authRequired, type AuthedRequest } from "../middleware/auth.js";
-import type { PlanTier } from "@prisma/client";
+import type { PlanTier, Role } from "@prisma/client";
 import { interestCategoryHints } from "../lib/onboardingCatalog.js";
 import { formatInrFromPaise } from "../lib/inr.js";
 import { pathParam } from "../lib/httpParams.js";
@@ -27,12 +27,41 @@ const profilePatchSchema = z.object({
 });
 
 const phoneLinkRequestSchema = z.object({
-  phone: z.string().min(8).max(24),
+  phone: z.string().min(10).max(24),
 });
 
 const phoneLinkVerifySchema = z.object({
-  phone: z.string().min(8).max(24),
+  phone: z.string().min(10).max(24),
   code: z.string().regex(/^\d{6}$/),
+});
+
+/** First-run after phone signup: set LEARNER vs INSTRUCTOR and mark intent complete. */
+const chooseIntentSchema = z.object({
+  role: z.enum(["LEARNER", "INSTRUCTOR"]),
+});
+
+router.patch("/", authRequired, async (req: AuthedRequest, res) => {
+  const parsed = chooseIntentSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.flatten() });
+    return;
+  }
+  const targetRole = parsed.data.role as Role;
+  const updated = await prisma.user.update({
+    where: { id: req.userId! },
+    data: {
+      intentChosen: true,
+      role: targetRole,
+      ...(targetRole === "INSTRUCTOR"
+        ? {
+            specialty: "New instructor",
+            instructorStudents: 0,
+            instructorClasses: 0,
+          }
+        : {}),
+    },
+  });
+  res.json({ user: publicUser(updated) });
 });
 
 router.patch("/profile", authRequired, async (req: AuthedRequest, res) => {
@@ -57,7 +86,7 @@ router.post("/phone/request-link", authRequired, async (req: AuthedRequest, res)
   }
   const normalized = normalizePhone(parsed.data.phone);
   if (!normalized) {
-    res.status(400).json({ error: "Invalid phone number" });
+    res.status(400).json({ error: "Enter a valid 10-digit Indian mobile number." });
     return;
   }
   const me = await prisma.user.findUnique({
@@ -90,18 +119,10 @@ router.post("/phone/request-link", authRequired, async (req: AuthedRequest, res)
       linkUserId: req.userId!,
     },
   });
-  if (shouldExposeDemoOtp()) {
-    console.info(`[otp-link] user=${req.userId} ${normalized} → ${code}`);
-  }
   const expose = shouldExposeDemoOtp();
   res.json({
     ok: true,
-    ...(expose
-      ? {
-          demoOtp: code,
-          demoOtpHint: "No SMS — enter this code below (same demo rules as login OTP).",
-        }
-      : {}),
+    ...(expose ? { demoOtp: code } : {}),
   });
 });
 
@@ -114,7 +135,7 @@ router.post("/phone/verify-link", authRequired, async (req: AuthedRequest, res) 
   }
   const normalized = normalizePhone(parsed.data.phone);
   if (!normalized) {
-    res.status(400).json({ error: "Invalid phone number" });
+    res.status(400).json({ error: "Enter a valid 10-digit Indian mobile number." });
     return;
   }
   const challenge = await prisma.otpChallenge.findFirst({

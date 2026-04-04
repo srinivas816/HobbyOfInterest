@@ -113,16 +113,44 @@ const courseCreateSchema = z.object({
   published: z.boolean().optional(),
 });
 
-/** Fast activation: minimal fields; server fills description/outcomes. */
+const activationVenueSchema = z.enum(["MY_PLACE", "STUDENT_PLACE", "ONLINE"]);
+const activationScheduleSchema = z.enum(["WEEKDAYS", "WEEKENDS", "MORNING", "EVENING"]);
+
+const SCHEDULE_PART_LABELS: Record<z.infer<typeof activationScheduleSchema>, string> = {
+  WEEKDAYS: "Weekdays",
+  WEEKENDS: "Weekends",
+  MORNING: "Morning",
+  EVENING: "Evening",
+};
+
+/** Fast activation: guided flow; server fills description/outcomes. */
 const courseActivationSchema = z.object({
   title: z.string().min(3).max(160),
   category: z.string().min(2).max(120),
-  format: z.enum(["ONLINE", "IN_PERSON"]),
+  venues: z.array(activationVenueSchema).min(1).max(3),
+  schedule: z.array(activationScheduleSchema).min(1).max(4),
+  /** Monthly fee in paise (same unit as stored priceCents). 0 = free */
+  pricePaise: z.number().int().min(0).max(99_999_900),
   city: z.string().max(120).optional().nullable(),
-  durationLabel: z.string().min(2).max(80),
-  /** Monthly or per-term fee in INR (whole rupees); 0 = free */
-  priceInr: z.number().int().min(0).max(999999),
 });
+
+function activationVenuesToFormat(venues: z.infer<typeof activationVenueSchema>[]): {
+  format: "ONLINE" | "IN_PERSON";
+  locationLabel: string;
+} {
+  const hasOnline = venues.includes("ONLINE");
+  const hasMy = venues.includes("MY_PLACE");
+  const hasStudent = venues.includes("STUDENT_PLACE");
+  if (!hasMy && !hasStudent && hasOnline) {
+    return { format: "ONLINE", locationLabel: "Online" };
+  }
+  const parts: string[] = [];
+  if (hasMy) parts.push("At my place");
+  if (hasStudent) parts.push("Student’s place");
+  if (hasOnline) parts.push("Online");
+  const label = parts.length > 0 ? parts.join(" · ") : "In person";
+  return { format: "IN_PERSON", locationLabel: label };
+}
 
 const announcementCreateSchema = z.object({
   title: z.string().max(200).optional(),
@@ -553,19 +581,21 @@ router.post("/courses/activation", authRequired, async (req: AuthedRequest, res)
     res.status(400).json({ error: parsed.error.flatten() });
     return;
   }
-  if (parsed.data.format === "IN_PERSON" && !(parsed.data.city?.trim())) {
-    res.status(400).json({ error: "City is required for in-person classes" });
-    return;
-  }
+  const { format, locationLabel } = activationVenuesToFormat(parsed.data.venues);
+  const cityTrimmed = parsed.data.city?.trim() ?? "";
+  const cityDefault = cityTrimmed || "Mumbai";
   const title = parsed.data.title.trim();
+  const durationLabel = [...parsed.data.schedule]
+    .sort()
+    .map((k) => SCHEDULE_PART_LABELS[k])
+    .join(" · ");
   const whereLine =
-    parsed.data.format === "ONLINE"
+    format === "ONLINE"
       ? "Online sessions — link and schedule are shared after students join."
-      : `In-person in ${parsed.data.city!.trim()}.`;
-  const description = `${title}. Schedule: ${parsed.data.durationLabel}. ${whereLine} Students use this app for classroom updates, materials, and messages. You can edit the full listing anytime in Studio.`;
+      : `Teaching: ${locationLabel}. Based in ${cityDefault}.`;
+  const description = `${title}. Typical timing: ${durationLabel}. ${whereLine} Students use this app for classroom updates, materials, and messages. You can edit the full listing anytime in Studio.`;
   const outcomes = `Attend scheduled sessions; practice between classes; ask your instructor questions in the classroom.`;
-  const priceRupees = Math.max(parsed.data.priceInr, 0);
-  const priceCents = priceRupees * 100;
+  const priceCents = Math.max(parsed.data.pricePaise, 0);
 
   const base = slugify(title);
   let slug = base || "untitled-class";
@@ -581,10 +611,10 @@ router.post("/courses/activation", authRequired, async (req: AuthedRequest, res)
       title,
       description,
       category: parsed.data.category.trim(),
-      format: parsed.data.format,
-      locationLabel: parsed.data.format === "ONLINE" ? "Online" : "In-person",
-      city: parsed.data.format === "ONLINE" ? null : parsed.data.city!.trim(),
-      durationLabel: parsed.data.durationLabel.trim(),
+      format,
+      locationLabel,
+      city: format === "ONLINE" ? null : cityDefault,
+      durationLabel,
       priceCents,
       outcomes,
       imageKey: "hero-pottery",

@@ -20,6 +20,7 @@ export function publicUser(u: {
   specialty: string | null;
   phone?: string | null;
   onboardingCompletedAt?: Date | null;
+  intentChosen?: boolean;
 }) {
   return {
     id: u.id,
@@ -30,6 +31,7 @@ export function publicUser(u: {
     specialty: u.specialty,
     phone: u.phone ?? null,
     onboardingCompletedAt: u.onboardingCompletedAt ? u.onboardingCompletedAt.toISOString() : null,
+    intentChosen: u.intentChosen ?? true,
   };
 }
 
@@ -66,6 +68,7 @@ router.post("/register", async (req, res) => {
       role: (role as Role | undefined) ?? "LEARNER",
       planTier: "EXPLORER",
       onboardingCompletedAt: null,
+      intentChosen: true,
       ...(role === "INSTRUCTOR"
         ? {
             specialty: "New instructor",
@@ -110,15 +113,13 @@ router.get("/me", authRequired, async (req: AuthedRequest, res) => {
 });
 
 const otpRequestSchema = z.object({
-  phone: z.string().min(1).max(48),
+  phone: z.string().min(10).max(24),
 });
 
 const otpVerifySchema = z.object({
-  phone: z.string().min(1).max(48),
+  phone: z.string().min(10).max(24),
   code: z.string().regex(/^\d{6}$/),
   name: z.string().min(2).max(120).optional(),
-  /** Applied only when creating a new account; ignored for existing users. */
-  role: z.enum(["LEARNER", "INSTRUCTOR"]).optional(),
 });
 
 /** Request SMS OTP. When SMS is not configured (or demo mode), `demoOtp` is returned for on-screen entry. */
@@ -130,7 +131,7 @@ router.post("/otp/request", async (req, res) => {
   }
   const normalized = normalizePhone(parsed.data.phone);
   if (!normalized) {
-    res.status(400).json({ error: "Invalid phone number" });
+    res.status(400).json({ error: "Enter a valid 10-digit Indian mobile number." });
     return;
   }
   await prisma.otpChallenge.deleteMany({ where: { phone: normalized } });
@@ -141,19 +142,11 @@ router.post("/otp/request", async (req, res) => {
   await prisma.otpChallenge.create({
     data: { phone: normalized, codeHash, expiresAt },
   });
-  if (shouldExposeDemoOtp()) {
-    console.info(`[otp] ${normalized} → ${code} (demo OTP on screen)`);
-  }
   funnelLog("otp_sent", null, { demoMode: shouldExposeDemoOtp() });
   const expose = shouldExposeDemoOtp();
   res.json({
     ok: true,
-    ...(expose
-      ? {
-          demoOtp: code,
-          demoOtpHint: "No SMS — type this code below. Turn off with DEMO_OTP_ON_SCREEN=0 or set SMS_API_KEY for real delivery.",
-        }
-      : {}),
+    ...(expose ? { demoOtp: code } : {}),
   });
 });
 
@@ -166,7 +159,7 @@ router.post("/otp/verify", async (req, res) => {
   }
   const normalized = normalizePhone(parsed.data.phone);
   if (!normalized) {
-    res.status(400).json({ error: "Invalid phone number" });
+    res.status(400).json({ error: "Enter a valid 10-digit Indian mobile number." });
     return;
   }
   const challenge = await prisma.otpChallenge.findFirst({
@@ -181,16 +174,15 @@ router.post("/otp/verify", async (req, res) => {
     res.status(429).json({ error: "Too many attempts" });
     return;
   }
-  await prisma.otpChallenge.update({
-    where: { id: challenge.id },
-    data: { attempts: { increment: 1 } },
-  });
   const valid = await bcrypt.compare(parsed.data.code, challenge.codeHash);
   if (!valid) {
+    await prisma.otpChallenge.update({
+      where: { id: challenge.id },
+      data: { attempts: { increment: 1 } },
+    });
     res.status(400).json({ error: "Invalid code" });
     return;
   }
-  await prisma.otpChallenge.deleteMany({ where: { phone: normalized } });
 
   let user = await prisma.user.findFirst({ where: { phone: normalized } });
   let isNewUser = false;
@@ -203,7 +195,6 @@ router.post("/otp/verify", async (req, res) => {
     const rnd = randomBytes(14).toString("hex");
     const email = `p_${rnd}@phone.hoi`;
     const passwordHash = await bcrypt.hash(randomBytes(32).toString("hex"), 10);
-    const newRole = (parsed.data.role ?? "LEARNER") as Role;
     isNewUser = true;
     user = await prisma.user.create({
       data: {
@@ -211,20 +202,16 @@ router.post("/otp/verify", async (req, res) => {
         passwordHash,
         phone: normalized,
         name,
-        role: newRole,
+        role: "LEARNER",
         planTier: "EXPLORER",
         onboardingCompletedAt: null,
-        ...(newRole === "INSTRUCTOR"
-          ? {
-              specialty: "New instructor",
-              instructorStudents: 0,
-              instructorClasses: 0,
-            }
-          : {}),
+        intentChosen: false,
       },
     });
-    funnelLog("signup_otp", user.id, { role: newRole });
+    funnelLog("signup_otp", user.id, { role: "LEARNER" });
   }
+
+  await prisma.otpChallenge.deleteMany({ where: { phone: normalized } });
 
   const token = signToken(user.id);
   funnelLog("otp_verified", user.id, { isNewUser });

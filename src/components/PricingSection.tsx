@@ -126,7 +126,7 @@ const PricingSection = () => {
                   ))}
                 </ul>
                 <a
-                  href={plan.name === "Instructor Pro" ? "/login?mode=register&next=/instructor/studio" : "/login?mode=register&next=/learn"}
+                  href={plan.name === "Instructor Pro" ? "/login?next=/instructor/studio" : "/login?next=/learn"}
                   className={`inline-flex items-center justify-center gap-2 font-body text-sm px-6 py-4 rounded-full transition-all duration-300 font-medium w-full ${
                     plan.popular
                       ? "bg-accent text-accent-foreground hover:brightness-110 shadow-lg shadow-accent/25"

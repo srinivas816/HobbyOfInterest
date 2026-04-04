@@ -85,7 +85,7 @@ const DiscoverHomePage = () => {
   });
 
   const nearbyEmptyState = useMemo((): StripEmptyState => {
-    const teach = `/login?mode=register&role=instructor&next=${INSTRUCTOR_STUDIO_ONBOARD}`;
+    const teach = `/login?next=${INSTRUCTOR_STUDIO_ONBOARD}`;
     if (cityChip.apiCity) {
       return {
         title: `No classes yet in ${cityChip.apiCity}`,
@@ -103,7 +103,7 @@ const DiscoverHomePage = () => {
   }, [cityChip.apiCity]);
 
   const trendingEmptyState = useMemo((): StripEmptyState => {
-    const teach = `/login?mode=register&role=instructor&next=${INSTRUCTOR_STUDIO_ONBOARD}`;
+    const teach = `/login?next=${INSTRUCTOR_STUDIO_ONBOARD}`;
     return {
       title: "Trending fills up as learners join",
       description: "Explore the full catalog — or list your own class to appear here.",

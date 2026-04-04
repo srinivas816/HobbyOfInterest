@@ -89,7 +89,7 @@ const Footer = () => (
             <h4 className="font-body text-[10px] sm:text-xs tracking-widest uppercase text-dark-muted mb-4 sm:mb-5">Teach</h4>
             <ul className="space-y-2.5 sm:space-y-3">
               <li>
-                <Link to="/login?mode=register&role=instructor" className={footerLink}>
+                <Link to="/login" className={footerLink}>
                   Become an instructor
                 </Link>
               </li>

@@ -61,7 +61,7 @@ const InstructorClassesPage = () => {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl text-foreground">Your classes</h1>
-          <p className="text-sm text-muted-foreground font-body mt-1">Glance fees and today’s time before you open a class.</p>
+          <p className="text-sm text-muted-foreground font-body mt-1">Tap a class for today’s work.</p>
         </div>
       </div>
 

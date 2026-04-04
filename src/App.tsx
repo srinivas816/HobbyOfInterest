@@ -32,6 +32,9 @@ import InstructorClassesPage from "./pages/instructor/InstructorClassesPage.tsx"
 import InstructorStudentsPage from "./pages/instructor/InstructorStudentsPage.tsx";
 import InstructorMorePage from "./pages/instructor/InstructorMorePage.tsx";
 import InstructorClassWorkspacePage from "./pages/instructor/InstructorClassWorkspacePage.tsx";
+import ScrollToTop from "@/components/ScrollToTop";
+import { AuthIntentGate } from "@/components/AuthIntentGate";
+import ChooseRolePage from "./pages/ChooseRolePage.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -52,6 +55,8 @@ const App = () => (
         <Toaster />
         <Sonner />
         <BrowserRouter>
+          <ScrollToTop />
+          <AuthIntentGate>
           <Routes>
             <Route element={<MarketingLayout />}>
               <Route path="/" element={<Index />} />
@@ -78,6 +83,7 @@ const App = () => (
               <Route path="/admin/moderation" element={<AdminModerationPage />} />
               <Route path="/join/:code" element={<JoinClassPage />} />
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/choose-role" element={<ChooseRolePage />} />
               <Route path="/onboarding" element={<OnboardingPage />} />
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/terms" element={<TermsPage />} />
@@ -85,6 +91,7 @@ const App = () => (
               <Route path="*" element={<NotFound />} />
             </Route>
           </Routes>
+          </AuthIntentGate>
         </BrowserRouter>
       </TooltipProvider>
     </AuthProvider>

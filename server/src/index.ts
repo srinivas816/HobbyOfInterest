@@ -43,7 +43,9 @@ function parseCorsOrigins(): string[] {
 const corsOrigins = parseCorsOrigins();
 const corsOriginSet = new Set(corsOrigins);
 
-console.log(`CORS allow list (${corsOrigins.length}): ${corsOrigins.join(" | ")}`);
+if (process.env.NODE_ENV !== "production") {
+  console.log(`CORS allow list (${corsOrigins.length}): ${corsOrigins.join(" | ")}`);
+}
 const onlyLoopback =
   corsOrigins.length > 0 &&
   corsOrigins.every((o) => o.startsWith("http://localhost") || o.startsWith("http://127.0.0.1"));

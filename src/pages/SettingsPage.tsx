@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, Navigate, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate, useLocation } from "react-router-dom";
 import { Loader2, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { apiFetch, parseJson } from "@/lib/api";
 import { useAuth } from "@/context/AuthContext";
+import { isValidIndianMobileDigits, normalizePhoneFieldInput } from "@/lib/phoneDigits";
 import { mvpInstructorFocus } from "@/lib/productFocus";
 
 type InstructorProCreateOrderRes = {
@@ -46,6 +47,7 @@ function loadRazorpayScript(): Promise<void> {
 const SettingsPage = () => {
   const { user, token, ready, logout, refreshUser } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
   const queryClient = useQueryClient();
   const mvp = mvpInstructorFocus();
   const [proBusy, setProBusy] = useState(false);
@@ -77,11 +79,21 @@ const SettingsPage = () => {
   const [linkSent, setLinkSent] = useState(false);
   const [linkBusy, setLinkBusy] = useState(false);
   const [linkDemoOtp, setLinkDemoOtp] = useState<string | null>(null);
-  const [linkDemoHint, setLinkDemoHint] = useState<string | null>(null);
 
   useEffect(() => {
     if (user?.name) setName(user.name);
   }, [user?.name]);
+
+  useLayoutEffect(() => {
+    if (!ready || !token || !user) return;
+    const id = location.hash.replace(/^#/, "");
+    if (id !== "instructor-plan") return;
+    if (!mvp || user.role !== "INSTRUCTOR" || !subQuery.data) return;
+    const frame = window.requestAnimationFrame(() => {
+      document.getElementById("instructor-plan")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [ready, token, user, mvp, location.pathname, location.hash, subQuery.data]);
 
   if (!ready) {
     return (
@@ -120,6 +132,16 @@ const SettingsPage = () => {
 
   return (
     <main className="container mx-auto py-16 md:py-24 max-w-lg">
+      {mvp && user.role === "INSTRUCTOR" ? (
+        <div className="mb-6 flex flex-wrap gap-2">
+          <Button variant="outline" size="sm" className="rounded-full" asChild>
+            <Link to="/instructor/home">Teaching home</Link>
+          </Button>
+          <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" asChild>
+            <Link to="/instructor/classes">Classes</Link>
+          </Button>
+        </div>
+      ) : null}
       <h1 className="font-heading text-3xl text-foreground">Account</h1>
       <p className="font-body text-sm text-muted-foreground mt-2">
         Update how you appear on reviews and in Studio. Email can’t be changed here yet.
@@ -370,7 +392,7 @@ const SettingsPage = () => {
           Mobile number
         </h2>
         <p className="font-body text-sm text-muted-foreground mt-2 leading-relaxed">
-          Link your phone to sign in with OTP on this device. We’ll send a 6-digit code (logged in development if SMS isn’t configured).
+          Link your phone to sign in with OTP. We’ll send a 6-digit code to this number.
         </p>
         {user.phone ? (
           <p className="mt-4 text-sm font-body">
@@ -385,10 +407,11 @@ const SettingsPage = () => {
             <Input
               id="linkPhone"
               type="tel"
-              inputMode="tel"
-              placeholder="9876543210 or +91…"
+              inputMode="numeric"
+              maxLength={10}
+              placeholder="10-digit mobile"
               value={linkPhone}
-              onChange={(e) => setLinkPhone(e.target.value)}
+              onChange={(e) => setLinkPhone(normalizePhoneFieldInput(e.target.value))}
               autoComplete="tel"
               disabled={Boolean(user.phone)}
             />
@@ -398,7 +421,7 @@ const SettingsPage = () => {
               type="button"
               variant="secondary"
               className="rounded-full"
-              disabled={linkBusy || !linkPhone.trim()}
+              disabled={linkBusy || !isValidIndianMobileDigits(linkPhone)}
               onClick={async () => {
                 setLinkBusy(true);
                 try {
@@ -406,11 +429,10 @@ const SettingsPage = () => {
                     method: "POST",
                     body: JSON.stringify({ phone: linkPhone }),
                   });
-                  const data = await parseJson<{ ok: boolean; demoOtp?: string; demoOtpHint?: string }>(res);
+                  const data = await parseJson<{ ok: boolean; demoOtp?: string }>(res);
                   setLinkSent(true);
                   setLinkDemoOtp(data.demoOtp ?? null);
-                  setLinkDemoHint(data.demoOtpHint ?? null);
-                  toast.success(data.demoOtp ? "Code ready — see below" : "Code sent");
+                  toast.success(data.demoOtp ? "Code ready — check below" : "Check your phone for the code");
                 } catch (err) {
                   toast.error(err instanceof Error ? err.message : "Could not send code");
                 } finally {
@@ -423,6 +445,12 @@ const SettingsPage = () => {
           ) : null}
           {!user.phone && linkSent ? (
             <>
+              {linkDemoOtp ? (
+                <div className="rounded-xl border border-accent/50 bg-accent/10 px-3 py-3 text-center" role="status">
+                  <p className="text-[10px] uppercase text-muted-foreground font-body">Verification code</p>
+                  <p className="font-mono text-2xl tracking-widest font-semibold tabular-nums">{linkDemoOtp}</p>
+                </div>
+              ) : null}
               <div className="space-y-2">
                 <Label htmlFor="linkCode">6-digit code</Label>
                 <Input
@@ -467,7 +495,6 @@ const SettingsPage = () => {
                   setLinkSent(false);
                   setLinkCode("");
                   setLinkDemoOtp(null);
-                  setLinkDemoHint(null);
                 }}
               >
                 Use a different number

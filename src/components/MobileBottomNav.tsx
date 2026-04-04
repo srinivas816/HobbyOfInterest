@@ -17,12 +17,13 @@ const guestItems: NavItem[] = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/courses", label: "Explore", icon: Compass },
   {
-    to: "/login?mode=register&role=instructor&next=/instructor/studio",
+    to: "/login?next=/instructor/studio",
     label: "Teach",
     icon: LayoutDashboard,
     isActive: (pathname, _h, search) => {
       if (pathname !== "/login") return false;
-      return new URLSearchParams(search).get("role") === "instructor";
+      const next = new URLSearchParams(search).get("next") ?? "";
+      return next.includes("instructor");
     },
   },
   {
@@ -31,7 +32,8 @@ const guestItems: NavItem[] = [
     icon: LogIn,
     isActive: (pathname, _h, search) => {
       if (pathname !== "/login") return false;
-      return new URLSearchParams(search).get("role") !== "instructor";
+      const next = new URLSearchParams(search).get("next") ?? "";
+      return !next.includes("instructor");
     },
   },
 ];

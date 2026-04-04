@@ -20,13 +20,13 @@ const CTASection = () => (
 
             <div className="flex flex-col sm:flex-row gap-3 sm:gap-4 justify-center mt-8 sm:mt-10">
               <Link
-                to="/login?mode=register&next=/learn"
+                to="/login?next=/learn"
                 className="inline-flex items-center justify-center gap-2 bg-accent text-accent-foreground font-body text-sm px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:brightness-110 hover:gap-3 transition-all duration-300 font-medium shadow-lg shadow-accent/25"
               >
                 Get Started Free <ArrowRight size={16} />
               </Link>
               <Link
-                to="/login?mode=register&role=instructor&next=/instructor/studio"
+                to="/login?next=/instructor/studio"
                 className="inline-flex items-center justify-center gap-2 border border-dark-border font-body text-sm text-dark-foreground px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:bg-dark-foreground/10 transition-all duration-300"
               >
                 Become a Tutor

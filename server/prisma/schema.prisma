@@ -51,6 +51,8 @@ model User {
   onboardingProfile   Json?
   /// Set when user finishes onboarding; null means redirect to /onboarding.
   onboardingCompletedAt DateTime?
+  /// After phone OTP signup, false until user picks Learn vs Teach on /choose-role (or completes join-via-invite).
+  intentChosen        Boolean       @default(true)
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
   coursesTeaching     Course[]      @relation("InstructorCourses")
