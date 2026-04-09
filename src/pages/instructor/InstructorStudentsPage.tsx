@@ -45,7 +45,7 @@ const InstructorStudentsPage = () => {
       <div className="flex items-start justify-between gap-3">
         <div>
           <h1 className="font-heading text-2xl text-foreground">Students</h1>
-          <p className="text-sm text-muted-foreground font-body mt-1">Pick a class — roster, fees, and invites are there.</p>
+          <p className="text-sm text-muted-foreground font-body mt-1">Open a class to see students.</p>
         </div>
         <div className="rounded-xl bg-accent/10 p-2.5 shrink-0" aria-hidden>
           <Users className="h-6 w-6 text-accent" />
@@ -53,7 +53,7 @@ const InstructorStudentsPage = () => {
       </div>
 
       <Button className="mt-6 rounded-full h-12 w-full text-base gap-2" variant="outline" asChild>
-        <Link to="/instructor/studio?setup=1#studio-create-class">
+        <Link to="/instructor/activate">
           <Plus className="h-5 w-5" aria-hidden />
           New class
         </Link>
@@ -65,9 +65,9 @@ const InstructorStudentsPage = () => {
         </div>
       ) : courses.length === 0 ? (
         <div className="mt-8 rounded-2xl border border-dashed border-border p-8 text-center space-y-4">
-          <p className="text-sm text-muted-foreground font-body">No classes yet. Create one, then come back here.</p>
+          <p className="text-sm text-muted-foreground font-body">Create a class first.</p>
           <Button className="rounded-full h-12 w-full text-base font-semibold" asChild>
-            <Link to="/instructor/classes">Go to classes</Link>
+            <Link to="/instructor/activate">Create class</Link>
           </Button>
         </div>
       ) : (
@@ -86,7 +86,7 @@ const InstructorStudentsPage = () => {
             return (
               <li key={c.id}>
                 <Link
-                  to={`/instructor/class/${c.slug}?tab=students`}
+                  to={`/instructor/class/${encodeURIComponent(c.slug)}/students`}
                   className="flex items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 active:scale-[0.99] transition-transform"
                 >
                   <div className="min-w-0 flex-1">

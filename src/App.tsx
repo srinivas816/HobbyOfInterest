@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { BrowserRouter, Navigate, Outlet, Route, Routes } from "react-router-dom";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -25,16 +25,23 @@ import TermsPage from "./pages/TermsPage.tsx";
 import CookiesPage from "./pages/CookiesPage.tsx";
 import SettingsPage from "./pages/SettingsPage.tsx";
 import JoinClassPage from "./pages/JoinClassPage.tsx";
+import JoinEntryPage from "./pages/JoinEntryPage.tsx";
 import InstructorActivatePage from "./pages/InstructorActivatePage.tsx";
 import InstructorClassReadyPage from "./pages/InstructorClassReadyPage.tsx";
 import InstructorHomePage from "./pages/instructor/InstructorHomePage.tsx";
 import InstructorClassesPage from "./pages/instructor/InstructorClassesPage.tsx";
 import InstructorStudentsPage from "./pages/instructor/InstructorStudentsPage.tsx";
 import InstructorMorePage from "./pages/instructor/InstructorMorePage.tsx";
-import InstructorClassWorkspacePage from "./pages/instructor/InstructorClassWorkspacePage.tsx";
+import InstructorClassHubPage from "./pages/instructor/class/InstructorClassHubPage.tsx";
+import InstructorClassAttendancePage from "./pages/instructor/class/InstructorClassAttendancePage.tsx";
+import InstructorClassFeesPage from "./pages/instructor/class/InstructorClassFeesPage.tsx";
+import InstructorClassStudentsPage from "./pages/instructor/class/InstructorClassStudentsPage.tsx";
+import InstructorClassAnnouncePage from "./pages/instructor/class/InstructorClassAnnouncePage.tsx";
+import InstructorClassCatchAllRedirect from "./pages/instructor/class/InstructorClassCatchAllRedirect.tsx";
 import ScrollToTop from "@/components/ScrollToTop";
 import { AuthIntentGate } from "@/components/AuthIntentGate";
 import ChooseRolePage from "./pages/ChooseRolePage.tsx";
+import TeachLandingPage from "./pages/TeachLandingPage.tsx";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -60,6 +67,7 @@ const App = () => (
           <Routes>
             <Route element={<MarketingLayout />}>
               <Route path="/" element={<Index />} />
+              <Route path="/teach" element={<TeachLandingPage />} />
               <Route path="/courses" element={<CoursesPage />} />
               <Route path="/courses/:slug" element={<CourseDetailPage />} />
               <Route path="/learn/:courseSlug/lesson/:lessonId" element={<LessonPlayerPage />} />
@@ -78,9 +86,17 @@ const App = () => (
                 <Route path="classes" element={<InstructorClassesPage />} />
                 <Route path="students" element={<InstructorStudentsPage />} />
                 <Route path="more" element={<InstructorMorePage />} />
-                <Route path="class/:slug" element={<InstructorClassWorkspacePage />} />
+                <Route path="class/:slug" element={<Outlet />}>
+                  <Route index element={<InstructorClassHubPage />} />
+                  <Route path="attendance" element={<InstructorClassAttendancePage />} />
+                  <Route path="fees" element={<InstructorClassFeesPage />} />
+                  <Route path="students" element={<InstructorClassStudentsPage />} />
+                  <Route path="announce" element={<InstructorClassAnnouncePage />} />
+                  <Route path="*" element={<InstructorClassCatchAllRedirect />} />
+                </Route>
               </Route>
               <Route path="/admin/moderation" element={<AdminModerationPage />} />
+              <Route path="/join" element={<JoinEntryPage />} />
               <Route path="/join/:code" element={<JoinClassPage />} />
               <Route path="/login" element={<LoginPage />} />
               <Route path="/choose-role" element={<ChooseRolePage />} />

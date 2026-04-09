@@ -209,9 +209,9 @@ const AdminModerationPage = () => {
         {payoutQuery.data && payoutQuery.data.payoutRequests.length === 0 && (
           <DataStateCard
             title="No payout requests"
-            description="Instructors submit requests from Teaching studio → Payouts."
-            ctaLabel="Open studio"
-            ctaTo="/instructor/studio"
+            description="Instructors submit payout requests from Manage content (More menu) → Teaching tools → Payouts."
+            ctaLabel="Open Manage content"
+            ctaTo="/instructor/studio?tool=payout#studio-teaching-tools"
           />
         )}
       </div>

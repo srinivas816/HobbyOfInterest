@@ -1,6 +1,6 @@
 import type { To } from "react-router-dom";
 import { NavLink, useLocation } from "react-router-dom";
-import { BookOpen, Compass, Home, LayoutDashboard, LogIn, Settings, Users } from "lucide-react";
+import { BookOpen, Compass, Home, LayoutDashboard, LogIn, MoreHorizontal, Settings, Users } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { mvpInstructorFocus } from "@/lib/productFocus";
 import { cn } from "@/lib/utils";
@@ -13,11 +13,17 @@ type NavItem = {
   isActive?: (pathname: string, hash: string, search: string) => boolean;
 };
 
-const guestItems: NavItem[] = [
+const guestItemsMvp: NavItem[] = [
+  { to: "/", label: "Home", icon: Home, end: true },
+  { to: "/courses", label: "Explore", icon: Compass },
+  { to: "/teach", label: "Teach", icon: LayoutDashboard },
+];
+
+const guestItemsLegacy: NavItem[] = [
   { to: "/", label: "Home", icon: Home, end: true },
   { to: "/courses", label: "Explore", icon: Compass },
   {
-    to: "/login?next=/instructor/studio",
+    to: "/login?next=/instructor/home",
     label: "Teach",
     icon: LayoutDashboard,
     isActive: (pathname, _h, search) => {
@@ -47,29 +53,32 @@ const learnerItems: NavItem[] = [
 
 const instructorItems: NavItem[] = [
   {
-    to: { pathname: "/instructor/studio", hash: "studio-analytics", search: "" },
+    to: "/instructor/home",
     label: "Home",
-    icon: LayoutDashboard,
-    isActive: (pathname, hash, search) =>
-      pathname === "/instructor/studio" &&
-      (!hash || hash === "studio-analytics") &&
-      !new URLSearchParams(search).get("tool"),
+    icon: Home,
+    end: true,
+    isActive: (pathname) => pathname === "/instructor/home",
   },
   {
-    to: { pathname: "/instructor/studio", hash: "studio-classes", search: "" },
+    to: "/instructor/classes",
     label: "Classes",
     icon: BookOpen,
-    isActive: (pathname, hash, search) =>
-      pathname === "/instructor/studio" && hash === "studio-classes" && !new URLSearchParams(search).get("tool"),
+    isActive: (pathname) => pathname === "/instructor/classes" || pathname.startsWith("/instructor/class/"),
   },
   {
-    to: { pathname: "/instructor/studio", hash: "studio-teaching-tools", search: "?tool=roster" },
+    to: "/instructor/students",
     label: "Students",
     icon: Users,
-    isActive: (pathname, _h, search) =>
-      pathname === "/instructor/studio" && new URLSearchParams(search).get("tool") === "roster",
+    end: true,
+    isActive: (pathname) => pathname === "/instructor/students",
   },
-  { to: "/settings", label: "Profile", icon: Settings },
+  {
+    to: "/instructor/more",
+    label: "More",
+    icon: MoreHorizontal,
+    end: true,
+    isActive: (pathname) => pathname === "/instructor/more",
+  },
 ];
 
 function pathFromTo(to: To): string {
@@ -94,9 +103,9 @@ const MobileBottomNav = () => {
   const h = hash.replace(/^#/, "");
   const mvp = mvpInstructorFocus();
 
-  const learnerItemsEffective = mvp ? learnerItems.filter((i) => pathFromTo(i.to) !== "/courses") : learnerItems;
+  const guestItems = mvp ? guestItemsMvp : guestItemsLegacy;
 
-  const items: NavItem[] = !user ? guestItems : user.role === "INSTRUCTOR" ? instructorItems : learnerItemsEffective;
+  const items: NavItem[] = !user ? guestItems : user.role === "INSTRUCTOR" ? instructorItems : learnerItems;
 
   return (
     <nav

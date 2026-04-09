@@ -13,20 +13,19 @@ const CATEGORIES: { label: string; emoji: string; href: string }[] = [
 
 const CategoryScrollRow = () => {
   return (
-    <section className="mt-6 min-w-0" aria-label="Browse by category">
-      <div className="container mx-auto px-4 sm:px-6 mb-2">
-        <h2 className="font-heading text-lg sm:text-xl font-light text-foreground">Categories</h2>
-        <p className="font-body text-xs text-muted-foreground mt-0.5">Swipe to explore</p>
-      </div>
+    <section className="mt-4 min-w-0" aria-labelledby="discover-categories-heading">
+      <h2 id="discover-categories-heading" className="sr-only">
+        Categories
+      </h2>
       <div
-        className="flex gap-2 sm:gap-3 overflow-x-auto pb-2 px-4 sm:px-6 scroll-pl-4 overscroll-x-contain touch-pan-x snap-x snap-mandatory [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
+        className="flex gap-2 sm:gap-3 overflow-x-auto py-1 px-4 sm:px-6 scroll-pl-4 sm:scroll-pl-6 overscroll-x-contain touch-pan-x snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
         style={{ WebkitOverflowScrolling: "touch" }}
       >
         {CATEGORIES.map((c) => (
           <Link
             key={c.label}
             to={c.href}
-            className="snap-start shrink-0 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-4 py-2.5 font-body text-sm font-medium text-foreground hover:border-accent/50 hover:bg-accent/5 transition-colors"
+            className="snap-start shrink-0 inline-flex items-center gap-2 rounded-full border border-border/70 bg-card/80 px-4 py-2.5 font-body text-sm font-medium text-foreground hover:border-accent/50 hover:bg-accent/5 transition-colors touch-manipulation active:scale-[0.98]"
           >
             <span className="text-lg" aria-hidden>
               {c.emoji}

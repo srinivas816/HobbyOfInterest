@@ -26,7 +26,7 @@ const CTASection = () => (
                 Get Started Free <ArrowRight size={16} />
               </Link>
               <Link
-                to="/login?next=/instructor/studio"
+                to="/login?next=/instructor/home"
                 className="inline-flex items-center justify-center gap-2 border border-dark-border font-body text-sm text-dark-foreground px-7 sm:px-8 py-3.5 sm:py-4 rounded-full hover:bg-dark-foreground/10 transition-all duration-300"
               >
                 Become a Tutor

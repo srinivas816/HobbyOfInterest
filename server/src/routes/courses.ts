@@ -1,4 +1,5 @@
 import { Router } from "express";
+import { isDbUnavailableError } from "../lib/dbErrors.js";
 import { prisma } from "../lib/prisma.js";
 import { formatInrFromPaise } from "../lib/inr.js";
 import { funnelLog } from "../lib/funnel.js";
@@ -172,6 +173,14 @@ router.get("/", async (req, res) => {
     });
   } catch (err) {
     console.error("GET /api/courses failed:", err);
+    if (isDbUnavailableError(err)) {
+      res.status(503).json({
+        error:
+          "Database unreachable. Check DATABASE_URL and that your database (e.g. Neon) is running.",
+        code: "DB_UNAVAILABLE",
+      });
+      return;
+    }
     res.status(500).json({ error: "Failed to load courses" });
   }
 });

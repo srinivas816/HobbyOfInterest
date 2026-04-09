@@ -398,8 +398,8 @@ const ClassroomPage = () => {
                     {assignmentsQuery.data.isInstructor && (
                       <p className="mt-3 text-xs text-muted-foreground font-body">
                         Learners submit from this page. Open{" "}
-                        <Link to="/instructor/studio" className="text-accent underline">
-                          Teaching studio → Assignments
+                        <Link to="/instructor/studio?tool=assign#studio-teaching-tools" className="text-accent underline">
+                          Manage content → Assignments
                         </Link>{" "}
                         to read submissions.
                       </p>

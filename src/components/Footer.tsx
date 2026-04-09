@@ -94,13 +94,13 @@ const Footer = () => (
                 </Link>
               </li>
               <li>
-                <Link to="/instructor/studio" className={footerLink}>
-                  Instructor Studio
+                <Link to="/instructor/home" className={footerLink}>
+                  Teaching home
                 </Link>
               </li>
               <li>
-                <Link to="/instructor/studio#studio-analytics" className={footerLink}>
-                  Class analytics
+                <Link to="/instructor/more" className={footerLink}>
+                  Advanced tools &amp; analytics
                 </Link>
               </li>
               <li>

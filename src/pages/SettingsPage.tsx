@@ -144,7 +144,7 @@ const SettingsPage = () => {
       ) : null}
       <h1 className="font-heading text-3xl text-foreground">Account</h1>
       <p className="font-body text-sm text-muted-foreground mt-2">
-        Update how you appear on reviews and in Studio. Email can’t be changed here yet.
+        Update how you appear on reviews and in the app. Email can’t be changed here yet.
       </p>
 
       {mvp && user.role === "INSTRUCTOR" && subQuery.data ? (
@@ -378,10 +378,10 @@ const SettingsPage = () => {
             </div>
           ) : null}
           <Link
-            to="/instructor/studio"
+            to="/instructor/more"
             className="inline-flex mt-4 text-sm font-medium text-accent underline-offset-2 hover:underline"
           >
-            Open Studio
+            Advanced tools &amp; Manage content
           </Link>
         </section>
       ) : null}
@@ -540,8 +540,12 @@ const SettingsPage = () => {
           {user.role === "INSTRUCTOR" ? (
             <>
               {" · "}
-              <Link to="/instructor/studio" className="text-accent underline">
-                Teaching studio
+              <Link to="/instructor/home" className="text-accent underline">
+                Teaching home
+              </Link>
+              {" · "}
+              <Link to="/instructor/more" className="text-accent underline">
+                Manage content
               </Link>
             </>
           ) : null}

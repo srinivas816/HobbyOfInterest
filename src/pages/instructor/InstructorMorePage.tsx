@@ -1,24 +1,34 @@
 import { Link } from "react-router-dom";
 import type { LucideIcon } from "lucide-react";
-import { BarChart3, BookOpen, ChevronRight, CreditCard, GraduationCap, Home, UserRound } from "lucide-react";
+import { BarChart3, BookOpen, ChevronRight, CreditCard, GraduationCap, Home, UserRound, Wrench } from "lucide-react";
 
-const sections: {
-  title: string;
-  rows: { to: string; label: string; sub: string; icon: LucideIcon }[];
-}[] = [
+type Row = { to: string; label: string; sub: string; icon: LucideIcon };
+
+const sections: { title: string; rows: Row[] }[] = [
   {
-    title: "Manage",
+    title: "Advanced tools",
     rows: [
       {
         to: "/instructor/studio",
-        label: "Curriculum & content",
-        sub: "Lessons, sections, publish",
+        label: "Manage content",
+        sub: "Lessons, curriculum, publishing — occasional use, not your daily loop.",
         icon: BookOpen,
       },
       {
-        to: "/instructor/studio?setup=1#studio-create-class",
-        label: "Classes setup",
-        sub: "Create class, invite links",
+        to: "/instructor/studio#studio-analytics",
+        label: "Analytics",
+        sub: "Enrollments & completion",
+        icon: BarChart3,
+      },
+    ],
+  },
+  {
+    title: "Get started",
+    rows: [
+      {
+        to: "/instructor/activate",
+        label: "New class",
+        sub: "Quick setup & invite",
         icon: GraduationCap,
       },
     ],
@@ -30,19 +40,15 @@ const sections: {
       { to: "/settings#instructor-plan", label: "Plan & billing", sub: "Upgrade, student limits", icon: CreditCard },
     ],
   },
-  {
-    title: "Insights",
-    rows: [
-      { to: "/instructor/studio#studio-analytics", label: "Analytics", sub: "Enrollments & completion", icon: BarChart3 },
-    ],
-  },
 ];
 
 const InstructorMorePage = () => {
   return (
     <div className="container mx-auto max-w-lg px-4 pt-6 pb-4">
       <h1 className="font-heading text-2xl text-foreground">More</h1>
-      <p className="text-sm text-muted-foreground font-body mt-1">Extras — curriculum, billing, analytics.</p>
+      <p className="text-sm text-muted-foreground font-body mt-1">
+        Extras and advanced tools — billing, curriculum, and analytics.
+      </p>
 
       <div className="mt-4 flex flex-wrap gap-2">
         <Link
@@ -61,13 +67,21 @@ const InstructorMorePage = () => {
         </Link>
       </div>
 
+      <div className="mt-6 rounded-xl border border-border/50 bg-muted/20 px-3 py-2.5 flex gap-2 items-start">
+        <Wrench className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden />
+        <p className="text-xs text-muted-foreground font-body leading-relaxed">
+          <span className="text-foreground/90 font-medium">Advanced tools</span> are for publishing and deep edits. Day-to-day teaching uses Home,
+          Classes, and each class workspace.
+        </p>
+      </div>
+
       <div className="mt-8 space-y-8">
         {sections.map((sec) => (
           <section key={sec.title}>
             <h2 className="text-[11px] font-bold uppercase tracking-wider text-muted-foreground mb-3">{sec.title}</h2>
             <ul className="space-y-2">
               {sec.rows.map(({ to, label, sub, icon: Icon }) => (
-                <li key={to}>
+                <li key={`${sec.title}-${label}`}>
                   <Link
                     to={to}
                     className="flex items-center gap-4 rounded-2xl border border-border/60 bg-card p-4 active:scale-[0.99] transition-transform"

@@ -9,7 +9,7 @@ import { apiFetch, parseJson } from "@/lib/api";
 const TARGET_INVITES = 3;
 
 /**
- * First success moment after activation: push invites before Studio noise.
+ * First success moment after activation: push invites before deeper setup.
  */
 const InstructorClassReadyPage = () => {
   const { slug } = useParams<{ slug: string }>();
@@ -109,7 +109,7 @@ const InstructorClassReadyPage = () => {
         ) : null}
 
         <Button type="button" variant="outline" className="rounded-full w-full mt-4" onClick={() => navigate(studioHref, { replace: true })}>
-          Continue to Studio
+          Open class workspace
         </Button>
         <p className="text-[11px] text-muted-foreground font-body">
           You can always find this link under <span className="text-foreground">Teaching tools → Invite</span>.

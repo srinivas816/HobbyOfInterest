@@ -27,7 +27,7 @@ const features = [
   {
     icon: BookOpen,
     title: "Creator tools",
-    description: "Instructors use Studio to publish classes, upload media, and see enrollment & completion snapshots per class.",
+    description: "Instructors publish classes, upload media, and see enrollment & completion snapshots — advanced editing is grouped under Manage content.",
   },
   {
     icon: Shield,

@@ -1,17 +1,14 @@
 import { Link } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ChevronRight, Loader2, MessageCircle } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, parseJson } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
 
 type DashboardToday = {
-  sessionsToday: number;
-  pendingAttendanceCount: number;
   pendingFeesCount: number;
-  feeMonth: string;
   totalStudentEnrollments?: number;
+  coursesBrief?: Array<{ slug: string; title: string }>;
   scheduleToday?: Array<{
     sessionId: string;
     courseSlug: string;
@@ -20,18 +17,44 @@ type DashboardToday = {
     label: string | null;
     studentCount: number;
   }>;
+  classInsights?: Array<{ courseSlug: string; totalStudents: number; pendingFeesCount: number }>;
 };
 
+type PrimaryCase = "class_today" | "fees" | "no_students" | "all_clear";
+
 function greetingForHour(h: number): string {
-  if (h < 12) return "Good morning";
-  if (h < 17) return "Good afternoon";
-  return "Good evening";
+  if (h < 12) return "Good morning 👋";
+  if (h < 17) return "Good afternoon 👋";
+  return "Good evening 👋";
 }
+
+function formatTime(iso: string): string {
+  try {
+    return new Date(iso).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+  } catch {
+    return "";
+  }
+}
+
+function resolvePrimaryCase(
+  schedule: NonNullable<DashboardToday["scheduleToday"]>,
+  pendingFeesCount: number,
+  totalStudentEnrollments: number,
+  courseCount: number,
+): PrimaryCase {
+  if (schedule.length > 0) return "class_today";
+  if (pendingFeesCount > 0) return "fees";
+  if (courseCount > 0 && totalStudentEnrollments === 0) return "no_students";
+  return "all_clear";
+}
+
+const secondaryLinkClass =
+  "block w-full text-center text-sm font-semibold text-accent pt-2.5 hover:underline active:opacity-70";
 
 const InstructorHomePage = () => {
   const { user, token } = useAuth();
-  const hour = new Date().getHours();
-  const greet = greetingForHour(hour);
+  const greet = greetingForHour(new Date().getHours());
+  const firstName = user?.name?.split(" ")[0];
 
   const dash = useQuery({
     queryKey: ["instructor-dashboard-today"],
@@ -43,163 +66,160 @@ const InstructorHomePage = () => {
     staleTime: 30_000,
   });
 
-  const coursesQ = useQuery({
-    queryKey: ["studio-courses"],
-    enabled: Boolean(token),
-    queryFn: async () => {
-      const res = await apiFetch("/api/instructor-studio/courses");
-      return parseJson<{ courses: Array<{ slug: string; title: string }> }>(res);
-    },
-  });
+  const schedule = dash.data?.scheduleToday ?? [];
+  const insights = dash.data?.classInsights ?? [];
+  const coursesBrief = dash.data?.coursesBrief ?? [];
+  const courseCount = coursesBrief.length;
+  const firstCourseSlug = coursesBrief[0]?.slug;
+  const pendingFeesCount = dash.data?.pendingFeesCount ?? 0;
+  const totalStudentEnrollments = dash.data?.totalStudentEnrollments ?? 0;
 
-  const firstSlug = coursesQ.data?.courses[0]?.slug;
-  const primaryClass = dash.data?.scheduleToday?.[0]?.courseSlug ?? firstSlug;
-  const pendingAtt = dash.data?.pendingAttendanceCount ?? 0;
-  const pendingFees = dash.data?.pendingFeesCount ?? 0;
-  const hasUrgency = pendingAtt > 0 || pendingFees > 0;
-  const courseCount = coursesQ.data?.courses.length ?? 0;
-  const totalLearners = dash.data?.totalStudentEnrollments ?? 0;
-  const hasClass = courseCount > 0;
-  const hasStudents = totalLearners > 0;
-  const showSetupRail = !hasClass || !hasStudents;
+  const primaryCase = dash.data
+    ? resolvePrimaryCase(schedule, pendingFeesCount, totalStudentEnrollments, courseCount)
+    : null;
+
+  const firstSession = schedule[0];
+  const feesSlug =
+    insights.find((c) => c.pendingFeesCount > 0)?.courseSlug ?? firstCourseSlug ?? firstSession?.courseSlug;
+  const inviteSlug = firstCourseSlug;
+
+  const summaryLine = (() => {
+    if (!dash.data || !primaryCase) return null;
+    if (primaryCase === "class_today" && schedule.length > 1) {
+      return `You have ${schedule.length} classes today`;
+    }
+    if (primaryCase === "all_clear" && schedule.length === 0) {
+      return "No classes today";
+    }
+    return null;
+  })();
 
   return (
-    <div className="container mx-auto max-w-lg px-4 pt-6 pb-4 animate-in fade-in duration-300">
-      <p className="font-heading text-2xl text-foreground">
+    <div className="mx-auto max-w-lg px-4 pt-4 pb-4">
+      <p className="font-heading text-xl text-foreground leading-tight">
         {greet}
-        {user?.name ? `, ${user.name.split(" ")[0]}` : ""}
+        {firstName ? `, ${firstName}` : ""}
       </p>
 
       {dash.isLoading ? (
-        <div className="flex justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-accent" aria-hidden />
+        <div className="flex items-center gap-2 mt-4 text-muted-foreground text-sm font-body">
+          <Loader2 className="h-4 w-4 animate-spin shrink-0 text-accent" aria-hidden />
+          Loading…
         </div>
       ) : dash.isError ? (
-        <p className="text-sm text-muted-foreground mt-6 font-body">Couldn’t load today’s snapshot.</p>
+        <p className="text-sm text-muted-foreground mt-4 font-body">Couldn&apos;t load today.</p>
       ) : (
         <>
-          {showSetupRail ? (
-            <section className="mt-5 rounded-2xl border border-border/80 bg-card px-4 py-4">
-              <p className="text-xs font-bold uppercase tracking-wide text-muted-foreground font-body">Get started</p>
-              <ol className="mt-3 space-y-2 text-sm font-body">
-                <li className="flex items-center gap-2">
-                  <span className={cn("font-semibold", hasClass ? "text-emerald-600" : "text-foreground")}>
-                    {hasClass ? "✓" : "1."} Create your first class
-                  </span>
-                  {!hasClass ? (
-                    <Button size="sm" className="rounded-full h-8 text-xs ml-auto" asChild>
-                      <Link to="/instructor/studio?setup=1#studio-create-class">Create</Link>
-                    </Button>
-                  ) : null}
-                </li>
-                <li className="flex items-center gap-2 flex-wrap">
-                  <span className={cn("font-semibold", hasStudents ? "text-emerald-600" : "text-foreground")}>
-                    {hasStudents ? "✓" : "2."} Add students
-                  </span>
-                  {hasClass && !hasStudents && firstSlug ? (
-                    <Button size="sm" variant="secondary" className="rounded-full h-8 text-xs ml-auto" asChild>
-                      <Link to={`/instructor/class/${encodeURIComponent(firstSlug)}?tab=students`}>Add</Link>
-                    </Button>
-                  ) : null}
-                </li>
-                <li className="text-muted-foreground text-xs pt-1">
-                  {hasStudents ? (
-                    <span className="text-emerald-700 dark:text-emerald-300 font-medium">✓ 3. After class → mark attendance</span>
-                  ) : (
-                    <>3. After class → mark attendance</>
-                  )}
-                </li>
-              </ol>
-            </section>
+          {summaryLine ? (
+            <p className="mt-2 text-sm text-muted-foreground font-body">{summaryLine}</p>
           ) : null}
 
-          {hasUrgency ? (
-            <section
-              className={cn(
-                "mt-5 rounded-2xl border-2 p-4 shadow-sm",
-                "border-destructive/35 bg-gradient-to-b from-destructive/10 to-card",
-              )}
-            >
-              <h2 className="font-heading text-sm text-foreground">You need to</h2>
-              <ul className="mt-2 space-y-1.5 text-sm font-body text-foreground">
-                {pendingAtt > 0 ? (
-                  <li>
-                    <span className="font-semibold">Mark attendance</span> · {pendingAtt} open
-                  </li>
-                ) : null}
-                {pendingFees > 0 ? (
-                  <li>
-                    <span className="font-semibold">Fees</span> · {pendingFees} pending
-                  </li>
-                ) : null}
-              </ul>
-              <div className="mt-3 flex flex-col gap-2">
-                {primaryClass ? (
-                  <>
-                    {pendingAtt > 0 ? (
-                      <Button className="rounded-full h-12 text-base w-full font-semibold" asChild>
-                        <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=attendance`}>Mark attendance</Link>
-                      </Button>
-                    ) : null}
-                    {pendingFees > 0 ? (
-                      <Button variant="secondary" className="rounded-full h-12 text-base w-full font-semibold" asChild>
-                        <Link to={`/instructor/class/${encodeURIComponent(primaryClass)}?tab=fees`}>
-                          <MessageCircle className="mr-2 h-5 w-5 inline" aria-hidden />
-                          Remind students
-                        </Link>
-                      </Button>
-                    ) : null}
-                  </>
-                ) : (
-                  <Button className="rounded-full h-12 text-base w-full" asChild>
-                    <Link to="/instructor/classes">Open a class</Link>
-                  </Button>
-                )}
-              </div>
-            </section>
-          ) : (
-            <section className="mt-5 rounded-xl border border-emerald-500/30 bg-emerald-500/8 px-3 py-2.5">
-              <p className="text-sm font-body text-foreground">
-                <span className="font-semibold text-emerald-800 dark:text-emerald-200">Caught up</span> · nothing urgent today
-              </p>
-            </section>
-          )}
-
-          <section className="mt-6">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-muted-foreground font-body">Today</h2>
-            <div className="mt-2 space-y-3">
-              {(dash.data?.scheduleToday?.length ?? 0) === 0 ? (
-                <div className="rounded-2xl border border-border/60 bg-card/60 p-4 text-center">
-                  <p className="text-sm text-muted-foreground font-body">No sessions today.</p>
-                  <Button className="mt-3 rounded-full w-full h-11 text-sm" variant="secondary" asChild>
-                    <Link to="/instructor/classes">Classes</Link>
-                  </Button>
-                </div>
-              ) : (
-                dash.data!.scheduleToday!.map((s) => (
-                  <Link
-                    key={s.sessionId}
-                    to={`/instructor/class/${encodeURIComponent(s.courseSlug)}?tab=attendance`}
-                    className="block rounded-2xl border border-border/60 bg-card p-4 active:scale-[0.99] transition-all duration-150 hover:border-accent/40"
-                  >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-semibold tabular-nums text-accent">
-                          {new Date(s.heldAt).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" })}
-                        </p>
-                        <p className="font-heading text-lg text-foreground mt-0.5 truncate">{s.courseTitle}</p>
-                        <p className="text-sm text-muted-foreground font-body mt-1">
-                          {s.studentCount} student{s.studentCount === 1 ? "" : "s"}
-                          {s.label ? ` · ${s.label}` : null}
-                        </p>
-                      </div>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground shrink-0 mt-1" aria-hidden />
-                    </div>
+          <section className="mt-4 rounded-2xl border border-border bg-card px-4 py-4" aria-live="polite">
+            {primaryCase === "class_today" && firstSession ? (
+              <>
+                <h2 className="font-heading text-base font-semibold text-foreground">Mark attendance for today</h2>
+                <p className="mt-1 text-sm text-muted-foreground font-body">
+                  {firstSession.courseTitle} · {formatTime(firstSession.heldAt)}
+                </p>
+                <Button className="mt-3 w-full rounded-xl h-11 text-sm font-semibold" asChild>
+                  <Link to={`/instructor/class/${encodeURIComponent(firstSession.courseSlug)}/attendance`}>
+                    Mark attendance
                   </Link>
-                ))
-              )}
-            </div>
+                </Button>
+                <Link
+                  to={`/instructor/class/${encodeURIComponent(firstSession.courseSlug)}`}
+                  className={secondaryLinkClass}
+                >
+                  View class
+                </Link>
+              </>
+            ) : null}
+
+            {primaryCase === "fees" && feesSlug ? (
+              <>
+                <h2 className="font-heading text-base font-semibold text-foreground">
+                  {pendingFeesCount} student{pendingFeesCount === 1 ? "" : "s"} haven&apos;t paid
+                </h2>
+                <Button className="mt-3 w-full rounded-xl h-11 text-sm font-semibold" asChild>
+                  <Link to={`/instructor/class/${encodeURIComponent(feesSlug)}/fees#fee-remind`}>Remind now</Link>
+                </Button>
+                <Link to={`/instructor/class/${encodeURIComponent(feesSlug)}/fees`} className={secondaryLinkClass}>
+                  Open fees
+                </Link>
+              </>
+            ) : null}
+
+            {primaryCase === "fees" && !feesSlug ? (
+              <p className="text-sm text-muted-foreground font-body">
+                <Link to="/instructor/classes" className="text-accent font-semibold hover:underline">
+                  Open Classes
+                </Link>{" "}
+                and pick a class.
+              </p>
+            ) : null}
+
+            {primaryCase === "no_students" && inviteSlug ? (
+              <>
+                <h2 className="font-heading text-base font-semibold text-foreground">Add your first students</h2>
+                <Button className="mt-3 w-full rounded-xl h-11 text-sm font-semibold" asChild>
+                  <Link to={`/instructor/class/${encodeURIComponent(inviteSlug)}/students`}>Share invite</Link>
+                </Button>
+                <Link
+                  to={`/instructor/class/${encodeURIComponent(inviteSlug)}/students`}
+                  className={secondaryLinkClass}
+                >
+                  Add manually
+                </Link>
+              </>
+            ) : null}
+
+            {primaryCase === "no_students" && !inviteSlug ? (
+              <>
+                <h2 className="font-heading text-base font-semibold text-foreground">Add your first students</h2>
+                <Button className="mt-3 w-full rounded-xl h-11 text-sm font-semibold" asChild>
+                  <Link to="/instructor/activate">Create new class</Link>
+                </Button>
+              </>
+            ) : null}
+
+            {primaryCase === "all_clear" ? (
+              <>
+                <h2 className="font-heading text-base font-semibold text-foreground">You&apos;re all set today</h2>
+                <Link to="/instructor/classes" className={`${secondaryLinkClass} mt-3 pt-0`}>
+                  View your classes
+                </Link>
+              </>
+            ) : null}
           </section>
+
+          {schedule.length > 1 ? (
+            <ul className="mt-3 space-y-1 text-sm font-body" aria-label="Today's classes">
+              {schedule.map((s) => (
+                <li key={s.sessionId}>
+                  <Link
+                    to={`/instructor/class/${encodeURIComponent(s.courseSlug)}`}
+                    className="block py-1 text-foreground hover:text-accent active:opacity-70"
+                  >
+                    <span className="font-medium">{s.courseTitle}</span>
+                    <span className="text-muted-foreground">
+                      {" "}
+                      · {formatTime(s.heldAt)} · {s.studentCount} student{s.studentCount === 1 ? "" : "s"}
+                    </span>
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          ) : null}
+
+          <nav className="mt-4 text-xs text-muted-foreground font-body" aria-label="Quick actions">
+            <Link to="/instructor/activate" className="text-accent font-semibold hover:underline">
+              Create new class
+            </Link>
+            <span className="mx-2 text-border">·</span>
+            <Link to="/instructor/classes" className="text-accent font-semibold hover:underline">
+              View all classes
+            </Link>
+          </nav>
         </>
       )}
     </div>

@@ -82,9 +82,7 @@ const HeroSection = () => {
               {mvp && !user ? (
                 <div className="mt-8 flex flex-col sm:flex-row flex-wrap gap-3">
                   <Link
-                    to={`/login?next=${encodeURIComponent(
-                      "/instructor/studio?setup=1#studio-create-class",
-                    )}`}
+                    to={`/login?next=${encodeURIComponent("/instructor/home")}`}
                     className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background px-6 py-3.5 text-sm font-medium hover:opacity-90 transition-opacity text-center"
                   >
                     <Sparkles size={16} />
@@ -119,14 +117,22 @@ const HeroSection = () => {
               {user?.role === "INSTRUCTOR" ? (
                 <div className="mt-5 flex flex-wrap items-center gap-3">
                   <Link
-                    to={mvp ? "/instructor/studio?setup=1#studio-create-class" : "/instructor/studio"}
+                    to="/instructor/home"
                     className="inline-flex items-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
                   >
                     <Sparkles size={16} />
-                    {mvp ? "Studio — class & invites" : "Create a class in Studio"}
+                    Teaching home
+                  </Link>
+                  <Link
+                    to="/instructor/activate"
+                    className="inline-flex items-center gap-2 rounded-full border border-border/70 px-5 py-2.5 text-sm font-medium text-foreground hover:bg-muted/40 transition-colors"
+                  >
+                    New class
                   </Link>
                   <span className="font-body text-xs text-muted-foreground max-w-xs">
-                    {mvp ? "Invite link and WhatsApp live under Teaching tools → Roster." : "Your teaching home — new sessions, lessons, and publish flow."}
+                    {mvp
+                      ? "Invites and roster live under each class. Curriculum and publishing: More → Manage content."
+                      : "Daily teaching uses Home and Classes. Heavy editing lives under More → Manage content."}
                   </span>
                 </div>
               ) : null}

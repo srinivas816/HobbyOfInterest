@@ -1167,7 +1167,7 @@ const InstructorStudioPage = () => {
       </main>
     );
   }
-  if (!token) return <Navigate to="/login?next=/instructor/studio" replace />;
+  if (!token) return <Navigate to="/login?next=/instructor/home" replace />;
   if (user?.role !== "INSTRUCTOR") return <main className="container mx-auto py-20">Instructor access only.</main>;
 
   const isAdmin = user.email?.toLowerCase() === "admin@demo.com";
@@ -1187,14 +1187,14 @@ const InstructorStudioPage = () => {
       ) : null}
       <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4">
         <div>
-          <h1 className="font-heading text-3xl">{mvpFocus ? "Your classes & students" : "Instructor Studio"}</h1>
+          <h1 className="font-heading text-3xl">{mvpFocus ? "Your classes & students" : "Manage content"}</h1>
           <p className="text-sm text-muted-foreground mt-2 max-w-2xl font-body leading-relaxed">
             {mvpFocus ? (
               <>Create classes, publish lessons, and manage invites. For attendance and fees, use <span className="text-foreground/90">Home</span> and <span className="text-foreground/90">Classes</span> in the teaching app.</>
             ) : (
               <>
-                Edit class listings, curriculum, and media. Use Teaching tools for roster, announcements, Q&amp;A, assignments, and demo payouts;
-                learners use Classroom from their enrollments for the same discussions and submissions.
+                Secondary workspace for listings, curriculum, and media — open when you need to publish or restructure. Day-to-day roster, invites,
+                and class work live under <span className="text-foreground/90">Teaching home</span> and each class. Teaching tools here cover announcements, Q&amp;A, assignments, and demo payouts; learners use Classroom from their enrollments.
               </>
             )}
           </p>
@@ -1220,7 +1220,7 @@ const InstructorStudioPage = () => {
               <p className="text-sm font-body text-foreground flex-1 min-w-0">{a.message}</p>
               <div className="flex flex-wrap gap-2 shrink-0">
                 <Button variant="outline" size="sm" className="rounded-full" asChild>
-                  <Link to={mvpFocus ? "/instructor/classes" : "/instructor/studio?tool=roster#studio-teaching-tools"}>Open roster</Link>
+                  <Link to="/instructor/classes">Open roster</Link>
                 </Button>
                 <Button
                   type="button"
@@ -1268,7 +1268,7 @@ const InstructorStudioPage = () => {
             </p>
           </div>
           <Button variant="secondary" className="rounded-full shrink-0" asChild>
-            <Link to={mvpFocus ? "/instructor/classes" : "/instructor/studio?tool=roster#studio-teaching-tools"}>Open invite</Link>
+            <Link to="/instructor/classes">Open invite</Link>
           </Button>
         </div>
       ) : null}
@@ -1444,26 +1444,17 @@ const InstructorStudioPage = () => {
         </div>
       ) : null}
 
-      {user && !user.onboardingCompletedAt && (
-        <div className="mt-6 rounded-2xl border border-accent/40 bg-accent/10 px-4 py-3 sm:px-5 sm:py-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <p className="text-sm text-foreground font-body leading-relaxed">
-            Finish your teaching profile setup to unlock the best defaults for your public page and class draft.
-          </p>
-          <Link
-            to={`/onboarding?next=${encodeURIComponent("/instructor/studio")}`}
-            className="shrink-0 text-center rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
-          >
-            Continue onboarding
-          </Link>
-        </div>
-      )}
-
       {isLoading && <Loader2 size={26} className="animate-spin text-accent mt-8" />}
 
       {!isLoading && (
         <div className={mvpFocus ? "flex flex-col" : undefined}>
           <div className={`mt-8 rounded-2xl border border-border/60 bg-card/50 p-6${mvpFocus ? " order-3" : ""}`}>
             <h2 className="font-heading text-xl">Tutor profile</h2>
+            {user && !user.onboardingCompletedAt ? (
+              <p className="mt-2 text-xs text-muted-foreground font-body leading-relaxed">
+                Optional: these fields power your public tutor page — fill in when you want, then save. Everything else works without it.
+              </p>
+            ) : null}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-4">
               <input className="rounded-xl border p-2.5" value={profileName} onChange={(e) => setProfileName(e.target.value)} placeholder="Display name" />
               <input className="rounded-xl border p-2.5" value={profileSpecialty} onChange={(e) => setProfileSpecialty(e.target.value)} placeholder="Specialty (e.g. Pottery & Ceramics)" />

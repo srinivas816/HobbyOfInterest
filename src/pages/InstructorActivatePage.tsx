@@ -85,7 +85,7 @@ function formatRupeesDisplay(digits: string): string {
 }
 
 /**
- * Guided first class setup → POST activation → class workspace (students tab).
+ * Guided first class setup → POST activation → students (invite).
  */
 const InstructorActivatePage = () => {
   const { user, token, ready } = useAuth();
@@ -200,7 +200,7 @@ const InstructorActivatePage = () => {
       } catch {
         /* ignore */
       }
-      navigate(`/instructor/class/${encodeURIComponent(data.course.slug)}?tab=students&activated=1`, { replace: true });
+      navigate(`/instructor/class/${encodeURIComponent(data.course.slug)}/students`, { replace: true });
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Could not create class");
     } finally {
@@ -369,7 +369,7 @@ const InstructorActivatePage = () => {
                 placeholder="2500"
               />
             </div>
-            <p className="text-xs text-muted-foreground font-body mt-2">Suggested: ₹2,500 — edit anytime in Studio.</p>
+            <p className="text-xs text-muted-foreground font-body mt-2">Suggested: ₹2,500 — edit anytime in Manage content (More menu).</p>
           </div>
           <Button type="button" className="w-full rounded-full h-12 text-base" onClick={goNext}>
             Continue

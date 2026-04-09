@@ -15,6 +15,12 @@ const navLinks = [
   { label: "FAQ", href: "#faq" },
 ];
 
+const discoverNavLinks = (role: string | undefined) => {
+  const links = [{ label: "Classes", href: "/courses" as const }];
+  if (role !== "INSTRUCTOR") links.push({ label: "Teach", href: "/teach" as const });
+  return links;
+};
+
 const Navbar = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
@@ -24,16 +30,14 @@ const Navbar = () => {
   const { user, logout } = useAuth();
   const mvp = mvpInstructorFocus();
   const navLinksEffective = useMemo(
-    () =>
-      mvp && user?.role === "INSTRUCTOR"
-        ? navLinks.filter((l) => l.href !== "/courses" && l.href !== "#categories")
-        : navLinks,
-    [mvp, user?.role],
+    () => (location.pathname === "/" || mvp ? discoverNavLinks(user?.role) : navLinks),
+    [mvp, user?.role, location.pathname],
   );
-  const onboardingNext =
-    user?.role === "INSTRUCTOR" ? (mvp ? "/instructor/home" : "/instructor/studio") : "/learn";
-  const onboardingHref = `/onboarding?next=${encodeURIComponent(onboardingNext)}`;
-  const needsOnboarding = Boolean(user && !user.onboardingCompletedAt);
+  const onboardingHref = `/onboarding?next=${encodeURIComponent("/learn")}`;
+  /** Instructors use the teaching app shell; do not push full-page onboarding from nav. */
+  const needsLearnerOnboarding = Boolean(
+    user && user.role !== "INSTRUCTOR" && !user.onboardingCompletedAt,
+  );
 
   useEffect(() => {
     const handleScroll = () => {
@@ -113,7 +117,7 @@ const Navbar = () => {
         <div className="hidden lg:flex items-center gap-4">
           {user ? (
             <>
-              {needsOnboarding && (
+              {needsLearnerOnboarding && (
                 <Link
                   to={onboardingHref}
                   className="font-body text-sm font-medium text-accent border border-accent/50 bg-accent/10 px-4 py-2 rounded-full hover:bg-accent/15 transition-colors"
@@ -123,11 +127,11 @@ const Navbar = () => {
               )}
               {user.role === "INSTRUCTOR" && (
                 <Link
-                  to={mvp ? "/instructor/home" : "/instructor/studio"}
+                  to="/instructor/home"
                   className="font-body text-sm font-medium text-foreground hover:text-accent transition-colors px-4 py-2 rounded-full border border-accent/40 bg-accent/10 hover:bg-accent/15"
-                  title="Manage classes you teach"
+                  title="Teaching home — daily class work"
                 >
-                  {mvp ? "My classes & students" : "Teaching studio"}
+                  {mvp ? "My classes & students" : "Teaching home"}
                 </Link>
               )}
               <Link
@@ -201,7 +205,7 @@ const Navbar = () => {
             <div className="pt-3 border-t border-border/20 flex flex-col gap-2">
               {user ? (
                 <>
-                  {needsOnboarding && (
+                  {needsLearnerOnboarding && (
                     <Link
                       to={onboardingHref}
                       className="font-body text-sm font-medium text-accent border border-accent/50 bg-accent/10 px-4 py-2 rounded-full text-center"
@@ -212,11 +216,11 @@ const Navbar = () => {
                   )}
                   {user.role === "INSTRUCTOR" && (
                     <Link
-                      to={mvp ? "/instructor/home" : "/instructor/studio"}
+                      to="/instructor/home"
                       className="font-body text-sm font-medium text-foreground py-2"
                       onClick={() => setMobileOpen(false)}
                     >
-                      {mvp ? "My classes & students" : "Teaching studio"}
+                      {mvp ? "My classes & students" : "Teaching home"}
                     </Link>
                   )}
                   <Link to="/learn" className="font-body text-sm text-foreground py-2" onClick={() => setMobileOpen(false)}>

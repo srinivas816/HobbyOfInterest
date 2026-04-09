@@ -4,7 +4,6 @@ import { ArrowRight, BookOpen, CalendarClock, GraduationCap, Megaphone } from "l
 import { useAuth } from "@/context/AuthContext";
 import { apiFetch, parseJson } from "@/lib/api";
 import { Button } from "@/components/ui/button";
-import { mvpInstructorFocus } from "@/lib/productFocus";
 
 type EnrollmentRow = {
   id: string;
@@ -30,8 +29,6 @@ type SubscriptionSummary = {
   checkoutLive?: boolean;
 };
 
-const ROSTER_LEGACY = "/instructor/studio?tool=roster#studio-teaching-tools";
-const ANNOUNCE_LEGACY = "/instructor/studio?tool=announce#studio-teaching-tools";
 const PLAN_UPGRADE = "/settings#instructor-plan";
 
 /**
@@ -66,7 +63,6 @@ type DashboardToday = {
 
 function InstructorLoggedInPanel() {
   const { token } = useAuth();
-  const mvp = mvpInstructorFocus();
   const sub = useQuery({
     queryKey: ["instructor-subscription-summary"],
     enabled: Boolean(token),
@@ -94,22 +90,16 @@ function InstructorLoggedInPanel() {
     sub.data.distinctLearnerCount >= sub.data.freeLearnerCap - 2;
 
   const firstSlug = dash.data?.scheduleToday?.[0]?.courseSlug;
-  const ROSTER = mvp
-    ? firstSlug
-      ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=attendance`
-      : "/instructor/classes"
-    : ROSTER_LEGACY;
-  const ANNOUNCE = mvp
-    ? firstSlug
-      ? `/instructor/class/${encodeURIComponent(firstSlug)}?panel=announce`
-      : "/instructor/classes"
-    : ANNOUNCE_LEGACY;
+  const ROSTER = firstSlug
+    ? `/instructor/class/${encodeURIComponent(firstSlug)}/attendance`
+    : "/instructor/classes";
+  const ANNOUNCE = firstSlug
+    ? `/instructor/class/${encodeURIComponent(firstSlug)}/announce`
+    : "/instructor/classes";
 
-  const feesHref = mvp
-    ? firstSlug
-      ? `/instructor/class/${encodeURIComponent(firstSlug)}?tab=fees`
-      : "/instructor/classes"
-    : ROSTER_LEGACY;
+  const feesHref = firstSlug
+    ? `/instructor/class/${encodeURIComponent(firstSlug)}/fees`
+    : "/instructor/classes";
 
   return (
     <section className="border-b border-border/40 bg-gradient-to-b from-accent/10 to-background">
@@ -197,15 +187,9 @@ function InstructorLoggedInPanel() {
                 Announce
               </Link>
             </Button>
-            {mvp ? (
-              <Button variant="secondary" className="rounded-full h-9 text-sm" size="sm" asChild>
-                <Link to="/instructor/home">Home</Link>
-              </Button>
-            ) : (
-              <Button variant="secondary" className="rounded-full h-9 text-sm" size="sm" asChild>
-                <Link to="/instructor/studio">Studio</Link>
-              </Button>
-            )}
+            <Button variant="secondary" className="rounded-full h-9 text-sm" size="sm" asChild>
+              <Link to="/instructor/home">Teaching home</Link>
+            </Button>
           </div>
         </div>
       </div>

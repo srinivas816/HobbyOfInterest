@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { ArrowRight, ClipboardCheck, IndianRupee, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
-const STUDIO_NEXT = encodeURIComponent("/instructor/studio?setup=1#studio-create-class");
+const TEACHING_HOME_NEXT = encodeURIComponent("/instructor/home");
 
 /**
  * First-fold instructor priority for logged-out users (business: onboarding + retention before browse).
@@ -17,7 +17,7 @@ const InstructorLeadFold = () => {
             Manage your classes in one place<span className="text-accent">.</span>
           </h2>
           <p className="font-body text-sm sm:text-base text-muted-foreground mt-3 max-w-2xl leading-relaxed">
-            Track students, attendance, and payments — then list on the catalog when you&apos;re ready. Discovery for learners starts below.
+            Track students, attendance, and payments — then publish to the catalog so learners can find you in search and city strips.
           </p>
           <ul className="mt-5 grid gap-3 sm:grid-cols-3 font-body text-sm text-foreground/90">
             <li className="flex items-start gap-2 rounded-xl border border-border/40 bg-background/50 px-3 py-2.5">
@@ -35,13 +35,13 @@ const InstructorLeadFold = () => {
           </ul>
           <div className="mt-6 flex flex-col sm:flex-row sm:items-center gap-3">
             <Button className="rounded-full h-12 px-8 text-base" asChild>
-              <Link to={`/login?next=${STUDIO_NEXT}`}>
+              <Link to={`/login?next=${TEACHING_HOME_NEXT}`}>
                 Start teaching
                 <ArrowRight className="ml-2 h-4 w-4" aria-hidden />
               </Link>
             </Button>
             <Link
-              to={`/login?next=${encodeURIComponent("/instructor/studio")}`}
+              to={`/login?next=${TEACHING_HOME_NEXT}`}
               className="text-center sm:text-left font-body text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
             >
               Already an instructor? Log in

@@ -321,11 +321,14 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
 
   const ym = `${dayStart.getFullYear()}-${String(dayStart.getMonth() + 1).padStart(2, "0")}`;
 
-  const myCourses = await prisma.course.findMany({
+  const instructorCourses = await prisma.course.findMany({
     where: { instructorId: req.userId! },
-    select: { id: true },
+    select: { id: true, slug: true, title: true },
+    orderBy: { createdAt: "asc" },
   });
-  const courseIds = myCourses.map((c) => c.id);
+  const courseIds = instructorCourses.map((c) => c.id);
+  const coursesBrief = instructorCourses.map((c) => ({ slug: c.slug, title: c.title }));
+
   if (courseIds.length === 0) {
     res.json({
       sessionsToday: 0,
@@ -343,6 +346,8 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
         studentCount: number;
       }>,
       classInsights: [] as Array<{ courseSlug: string; totalStudents: number; pendingFeesCount: number }>,
+      coursesBrief: [] as Array<{ slug: string; title: string }>,
+      firstClassInvite: null as { slug: string; inviteCode: string } | null,
     });
     return;
   }
@@ -369,6 +374,13 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
   const totalStudentEnrollments = await prisma.enrollment.count({
     where: { course: { instructorId: req.userId! } },
   });
+
+  let firstClassInvite: { slug: string; inviteCode: string } | null = null;
+  if (totalStudentEnrollments === 0 && instructorCourses.length > 0) {
+    const first = instructorCourses[0]!;
+    const inviteCode = await assignInviteCodeIfMissing(prisma, first.id);
+    firstClassInvite = { slug: first.slug, inviteCode };
+  }
 
   const sessionCourseIds = [...new Set(sessionsToday.map((s) => s.courseId))];
   const enrollCounts =
@@ -447,6 +459,8 @@ router.get("/dashboard-today", authRequired, async (req: AuthedRequest, res) => 
     alerts,
     scheduleToday,
     classInsights,
+    coursesBrief,
+    firstClassInvite,
   });
 });
 
@@ -593,7 +607,7 @@ router.post("/courses/activation", authRequired, async (req: AuthedRequest, res)
     format === "ONLINE"
       ? "Online sessions — link and schedule are shared after students join."
       : `Teaching: ${locationLabel}. Based in ${cityDefault}.`;
-  const description = `${title}. Typical timing: ${durationLabel}. ${whereLine} Students use this app for classroom updates, materials, and messages. You can edit the full listing anytime in Studio.`;
+  const description = `${title}. Typical timing: ${durationLabel}. ${whereLine} Students use this app for classroom updates, materials, and messages. You can edit the full listing anytime in Manage content.`;
   const outcomes = `Attend scheduled sessions; practice between classes; ask your instructor questions in the classroom.`;
   const priceCents = Math.max(parsed.data.pricePaise, 0);
 
@@ -789,6 +803,8 @@ router.get("/courses/:slug/roster", authRequired, async (req: AuthedRequest, res
       title: course.title,
       slug: course.slug,
       monthlyFeeDisplay: formatInrFromPaise(course.priceCents),
+      /** Same as list price; used client-side for fee collection totals */
+      priceCents: course.priceCents,
       feeMonth,
     },
     summary: {

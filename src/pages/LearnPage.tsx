@@ -132,10 +132,14 @@ const LearnPage = () => {
             <p className="text-sm text-foreground font-body leading-relaxed flex items-start gap-2">
               <GraduationCap className="text-accent shrink-0 mt-0.5" size={18} />
               <span>
-                <span className="font-medium">Learner view.</span> This page lists classes you’ve joined as a student. To edit classes you teach,
-                use{" "}
-                <Link to="/instructor/studio" className="text-accent underline font-medium">
-                  Teaching studio
+                <span className="font-medium">Learner view.</span> This page lists classes you’ve joined as a student. To run classes you teach,
+                start at{" "}
+                <Link to="/instructor/home" className="text-accent underline font-medium">
+                  Teaching home
+                </Link>
+                ; curriculum and publishing live under{" "}
+                <Link to="/instructor/more" className="text-accent underline font-medium">
+                  More → Manage content
                 </Link>
                 .
               </span>

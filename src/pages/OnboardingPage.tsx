@@ -23,7 +23,7 @@ const OnboardingPage = () => {
   useEffect(() => {
     if (!ready || !user) return;
     if (user.role === "INSTRUCTOR") {
-      navigate("/instructor/studio?setup=1", { replace: true });
+      navigate("/instructor/home", { replace: true });
       return;
     }
     if (user.onboardingCompletedAt) {

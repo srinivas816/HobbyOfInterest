@@ -92,19 +92,21 @@ const HorizontalCourseStrip = ({
         </div>
       ) : (
         <div
-          className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 pt-1 px-4 sm:px-6 scroll-pl-4 sm:scroll-pl-6 overscroll-x-contain touch-pan-x snap-x snap-mandatory [scrollbar-width:thin] [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border"
+          className="flex gap-3 sm:gap-4 overflow-x-auto pb-2 pt-1 px-4 sm:px-6 scroll-pl-4 sm:scroll-pl-6 overscroll-x-contain touch-pan-x snap-x snap-mandatory [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
           style={{ WebkitOverflowScrolling: "touch" }}
         >
           {isLoading
-            ? Array.from({ length: 5 }).map((_, i) => (
+            ? Array.from({ length: 8 }).map((_, i) => (
                 <div
                   key={i}
-                  className="shrink-0 snap-start w-[min(78vw,260px)] sm:w-[280px] rounded-2xl border border-border/40 overflow-hidden"
+                  className="shrink-0 snap-start w-[min(85vw,300px)] sm:w-[300px] rounded-2xl border border-border/40 overflow-hidden"
                 >
-                  <Skeleton className="aspect-[4/3] w-full rounded-none" />
-                  <div className="p-3 space-y-2">
+                  <Skeleton className="aspect-[5/6] sm:aspect-[4/5] w-full rounded-none" />
+                  <div className="px-3.5 py-3 space-y-2">
                     <Skeleton className="h-4 w-full" />
-                    <Skeleton className="h-3 w-2/3" />
+                    <Skeleton className="h-3 w-1/2" />
+                    <Skeleton className="h-3 w-full" />
+                    <Skeleton className="h-8 w-full mt-2" />
                   </div>
                 </div>
               ))
@@ -115,10 +117,6 @@ const HorizontalCourseStrip = ({
                   badges={getBadges?.(course, index)}
                 />
               ))}
-
-          {!isLoading && !isError && courses.length === 0 ? (
-            <p className="font-body text-sm text-muted-foreground py-6 pl-2">No classes to show yet.</p>
-          ) : null}
         </div>
       )}
     </section>

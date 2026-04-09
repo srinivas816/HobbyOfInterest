@@ -32,7 +32,7 @@ const steps = [
     icon: Sparkles,
     step: "04",
     title: "Track & grow",
-    description: "See progress on My learning, save classes to your wishlist, and — if you teach — publish from Instructor Studio.",
+    description: "See progress on My learning, save classes to your wishlist, and — if you teach — run day-to-day work from Teaching home and publish from Manage content when needed.",
     color: "bg-accent/10 text-accent",
     borderColor: "border-accent/20 hover:border-accent/40",
   },

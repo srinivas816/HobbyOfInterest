@@ -1,5 +1,7 @@
 import "dotenv/config";
-import express from "express";
+import "express-async-errors";
+import express, { type ErrorRequestHandler } from "express";
+import { isDbUnavailableError } from "./lib/dbErrors.js";
 import authRoutes from "./routes/auth.js";
 import coursesRoutes from "./routes/courses.js";
 import recommendationsRoutes from "./routes/recommendations.js";
@@ -114,6 +116,22 @@ app.use("/api/course-engagement", courseEngagementRoutes);
 app.use((_req, res) => {
   res.status(404).json({ error: "Not found" });
 });
+
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  if (res.headersSent) return;
+  if (isDbUnavailableError(err)) {
+    console.error("[db-unavailable]", err instanceof Error ? err.message : err);
+    res.status(503).json({
+      error:
+        "Database unreachable. Check DATABASE_URL, network/VPN, and that your host (e.g. Neon) is active.",
+      code: "DB_UNAVAILABLE",
+    });
+    return;
+  }
+  console.error(err);
+  res.status(500).json({ error: "Internal server error" });
+};
+app.use(errorHandler);
 
 // Render (and most PaaS) require listening on all interfaces — not only loopback —
 // or the health check / port scan never sees an open port and deploy times out.

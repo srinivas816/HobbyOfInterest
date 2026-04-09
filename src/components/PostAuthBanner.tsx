@@ -27,14 +27,13 @@ const PostAuthBanner = () => {
               <p className="font-body text-xs text-muted-foreground mt-1 max-w-xl leading-relaxed">
                 {mvp ? (
                   <>
-                    <span className="text-foreground/90">Create a class</span>, then copy the invite link or tap{" "}
-                    <span className="text-foreground/90">WhatsApp</span> in Studio → Teaching tools → Roster. Students join at{" "}
-                    <span className="text-foreground/90">/join/your-code</span> — that’s your growth loop.
+                    <span className="text-foreground/90">Create a class</span>, invite on WhatsApp from{" "}
+                    <span className="text-foreground/90">Students</span>, then mark attendance and fees from your class.
                   </>
                 ) : (
                   <>
-                    After onboarding, <span className="text-foreground/90">Studio</span> is always where you add classes, lessons, and publish — or
-                    use <span className="text-foreground/90">Create a class</span> in the top bar on any page.
+                    Daily teaching lives in <span className="text-foreground/90">Teaching home</span>. Curriculum, publishing, and analytics are
+                    under <span className="text-foreground/90">More → Manage content</span> when you need them.
                   </>
                 )}
               </p>
@@ -42,12 +41,20 @@ const PostAuthBanner = () => {
           </div>
           <div className="flex flex-wrap items-center gap-2 shrink-0">
             <Link
-              to={mvp ? "/instructor/classes" : "/instructor/studio"}
+              to="/instructor/home"
               className="inline-flex items-center justify-center gap-2 rounded-full bg-foreground text-background px-5 py-2.5 text-sm font-medium hover:opacity-90 transition-opacity"
             >
               <Sparkles size={16} />
-              {mvp ? "Your classes" : "Open Studio — create a class"}
+              Teaching home
             </Link>
+            {mvp ? (
+              <Link
+                to="/instructor/classes"
+                className="inline-flex items-center justify-center rounded-full border border-border/70 px-4 py-2.5 text-sm text-foreground hover:bg-muted/40 transition-colors"
+              >
+                Your classes
+              </Link>
+            ) : null}
             {!mvp ? (
               <Link
                 to="/courses"
@@ -55,14 +62,13 @@ const PostAuthBanner = () => {
               >
                 Browse classes
               </Link>
-            ) : (
-              <Link
-                to={mvp ? "/instructor/classes" : "/instructor/studio?setup=1#studio-create-class"}
-                className="inline-flex items-center justify-center rounded-full border border-border/70 px-4 py-2.5 text-sm text-foreground hover:bg-muted/40 transition-colors"
-              >
-                New class
-              </Link>
-            )}
+            ) : null}
+            <Link
+              to="/instructor/activate"
+              className="inline-flex items-center justify-center rounded-full border border-border/70 px-4 py-2.5 text-sm text-foreground hover:bg-muted/40 transition-colors"
+            >
+              New class
+            </Link>
           </div>
         </div>
       </div>

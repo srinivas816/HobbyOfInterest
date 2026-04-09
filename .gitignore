@@ -16,6 +16,10 @@ server/prisma/*.db
 dist-ssr
 *.local
 
+# Environment and secrets (never commit — templates stay as *.example)
+.env
+server/.env
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

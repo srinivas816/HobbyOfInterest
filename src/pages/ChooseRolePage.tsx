@@ -40,9 +40,9 @@ const ChooseRolePage = () => {
       });
       const data = await parseJson<{ user: AuthUser }>(res);
       await refreshUser();
-      toast.success(role === "INSTRUCTOR" ? "Let’s set up your class" : "Welcome!");
+      toast.success("Welcome!");
       if (role === "INSTRUCTOR") {
-        navigate("/instructor/activate", { replace: true });
+        navigate("/instructor/home", { replace: true });
       } else {
         const done = Boolean(data.user.onboardingCompletedAt);
         if (!done) {

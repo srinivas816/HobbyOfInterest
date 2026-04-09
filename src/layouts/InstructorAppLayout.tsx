@@ -1,7 +1,6 @@
-import { Outlet, Navigate, useLocation, Link, useSearchParams } from "react-router-dom";
+import { Outlet, Navigate, useLocation, Link } from "react-router-dom";
 import { Home, GraduationCap, Users, Menu } from "lucide-react";
 import { useAuth } from "@/context/AuthContext";
-import { mvpInstructorFocus } from "@/lib/productFocus";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -11,19 +10,10 @@ const nav = [
   { to: "/instructor/more", label: "More", icon: Menu, end: false },
 ];
 
-/**
- * Mobile-first bottom nav for instructor daily loop (MVP instructor focus only).
- */
+/** Shell for `/instructor/home`, classes, students, more, and class workspace — not `/instructor/studio`. */
 const InstructorAppLayout = () => {
   const { user, token, ready } = useAuth();
   const location = useLocation();
-  const [searchParams] = useSearchParams();
-  const mvp = mvpInstructorFocus();
-  const workspaceTab = searchParams.get("tab");
-
-  if (!mvp) {
-    return <Outlet />;
-  }
 
   if (!ready) {
     return (
@@ -56,7 +46,7 @@ const InstructorAppLayout = () => {
             const active = end
               ? location.pathname === to
               : to === "/instructor/students"
-                ? location.pathname === "/instructor/students" || (onClass && workspaceTab === "students")
+                ? location.pathname === "/instructor/students"
                 : location.pathname.startsWith(to) || (to === "/instructor/classes" && onClass);
             return (
               <li key={to} className="flex-1 min-w-0">
